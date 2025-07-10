@@ -1,0 +1,5 @@
+framework module Flutter {
+  umbrella header "Flutter.h"
+  export *
+  module * { export * }
+}

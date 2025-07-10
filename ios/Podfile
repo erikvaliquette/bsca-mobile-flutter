@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-# platform :ios, '12.0'
+platform :ios, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -39,5 +39,28 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    # Fix for geolocator_apple 'Flutter/Flutter.h' file not found error
+    target.build_configurations.each do |config|
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= []
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] << "${PODS_ROOT}/../Flutter"
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] << "${PODS_XCFRAMEWORKS_BUILD_DIR}/Flutter"
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] << "${BUILT_PRODUCTS_DIR}"
+      
+      config.build_settings['HEADER_SEARCH_PATHS'] ||= []
+      config.build_settings['HEADER_SEARCH_PATHS'] << "${PODS_ROOT}/Headers/Public/Flutter"
+      config.build_settings['HEADER_SEARCH_PATHS'] << "${PODS_ROOT}/../Flutter"
+      config.build_settings['HEADER_SEARCH_PATHS'] << "${BUILT_PRODUCTS_DIR}/Flutter.framework/Headers"
+      
+      # Ensure proper import paths for geolocator_apple
+      if target.name == 'geolocator_apple'
+        config.build_settings['HEADER_SEARCH_PATHS'] << "${PODS_ROOT}/../../.symlinks/plugins/geolocator_apple/ios"
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        
+        # Add additional settings for geolocator_apple
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        config.build_settings['SWIFT_INCLUDE_PATHS'] = "${PODS_ROOT}/../Flutter"
+      end
+    end
   end
 end
