@@ -1,16 +1,21 @@
-# bsca_mobile_flutter
+# BSCA Mobile Flutter
 
-A new Flutter project.
+Flutter version of BSCA Mobile Application - A parallel development project to migrate from React Native to Flutter.
+
+## Project Overview
+
+This project is a Flutter implementation of the BSCA Mobile application, originally built with React Native. The goal is to maintain feature parity while leveraging Flutter's cross-platform capabilities.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+This project is built with Flutter. To get started:
 
-A few resources to get you started if this is your first Flutter project:
+1. Ensure you have Flutter installed on your machine
+2. Clone this repository
+3. Run `flutter pub get` to install dependencies
+4. Run `flutter run` to start the application
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Resources
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- [Flutter Documentation](https://docs.flutter.dev/)
+- [Supabase Flutter](https://supabase.com/docs/guides/getting-started/tutorials/with-flutter)
