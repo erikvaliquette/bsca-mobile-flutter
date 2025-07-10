@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:bsca_mobile_flutter/screens/profile/profile_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -7,6 +8,14 @@ class MoreScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // List of menu items for the More tab
     final List<MoreMenuItem> menuItems = [
+      MoreMenuItem(
+        title: 'My Profile',
+        icon: Icons.person,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        ),
+      ),
       MoreMenuItem(
         title: 'Actions',
         icon: Icons.play_arrow,

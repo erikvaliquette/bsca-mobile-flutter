@@ -33,11 +33,15 @@ class BusinessConnection {
   String get initials {
     if (name.isEmpty) return '';
     
-    final nameParts = name.split(' ');
+    final nameParts = name.split(' ').where((part) => part.isNotEmpty).toList();
+    if (nameParts.isEmpty) return '';
+    
     if (nameParts.length == 1) {
-      return nameParts[0][0].toUpperCase();
+      return nameParts[0].isNotEmpty ? nameParts[0][0].toUpperCase() : '';
     } else {
-      return '${nameParts[0][0]}${nameParts.last[0]}'.toUpperCase();
+      final firstInitial = nameParts[0].isNotEmpty ? nameParts[0][0].toUpperCase() : '';
+      final lastInitial = nameParts.last.isNotEmpty ? nameParts.last[0].toUpperCase() : '';
+      return '$firstInitial$lastInitial';
     }
   }
 

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../models/business_connection_model.dart';
 import '../../providers/business_connection_provider.dart';
 import '../../services/supabase/supabase_client.dart';
+import '../../utils/sdg_icons.dart';
+import '../../widgets/sdg_icon_widget.dart';
 
 class NetworkScreen extends StatefulWidget {
   const NetworkScreen({super.key});
@@ -99,15 +101,30 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: [
-                            _buildSDGIcon(1, Colors.red, 'assets/icons/sdg1.png'),
-                            _buildSDGIcon(2, Colors.amber, 'assets/icons/sdg2.png'),
-                            _buildSDGIcon(3, Colors.green, 'assets/icons/sdg3.png'),
-                            _buildSDGIcon(4, Colors.red.shade800, 'assets/icons/sdg4.png'),
-                            _buildSDGIcon(5, Colors.orange, 'assets/icons/sdg5.png'),
-                            _buildSDGIcon(6, Colors.blue.shade300, 'assets/icons/sdg6.png'),
-                            _buildSDGIcon(7, Colors.amber.shade300, 'assets/icons/sdg7.png'),
-                          ],
+                          children: SDGIcons.getAllSDGNumbers().map((sdgNumber) {
+                            return SDGIconWidget(
+                              sdgNumber: sdgNumber,
+                              isSelected: _selectedSDGFilter == sdgNumber,
+                              onTap: () {
+                                setState(() {
+                                  if (_selectedSDGFilter == sdgNumber) {
+                                    // If already selected, deselect it
+                                    _selectedSDGFilter = null;
+                                  } else {
+                                    // Otherwise, select it
+                                    _selectedSDGFilter = sdgNumber;
+                                  }
+                                  
+                                  // Update filter in provider
+                                  Provider.of<BusinessConnectionProvider>(context, listen: false)
+                                      .setSDGFilter(_selectedSDGFilter);
+                                });
+                              },
+                              size: 30.0,
+                              showLabel: false,
+                              useAssetIcon: true,
+                            );
+                          }).toList(),
                         ),
                       ),
                     ],
@@ -299,8 +316,9 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     VoidCallback? onDisconnect,
     VoidCallback? onMessage,
   }) {
-    // Determine avatar color based on connection id to ensure consistency
-    final int colorValue = connection.id.hashCode % 2;
+    // Safely determine avatar color based on connection id to ensure consistency
+    final String safeId = connection.id ?? 'default-id';
+    final int colorValue = safeId.hashCode % 2;
     final Color avatarColor = colorValue == 0 ? Colors.blue : Colors.blue.shade200;
     
     // Format location for display
@@ -324,7 +342,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                     backgroundImage: NetworkImage(connection.profileImageUrl!),
                   )
                 : Text(
-                    connection.initials,
+                    connection.initials ?? '',
                     style: const TextStyle(
                       fontSize: 72.0,
                       fontWeight: FontWeight.bold,
@@ -419,55 +437,5 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildSDGIcon(int number, Color color, String iconPath) {
-    bool isSelected = _selectedSDGFilter == number;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            // If already selected, deselect it
-            _selectedSDGFilter = null;
-          } else {
-            // Otherwise, select it
-            _selectedSDGFilter = number;
-          }
-          
-          // Update filter in provider
-          Provider.of<BusinessConnectionProvider>(context, listen: false)
-              .setSDGFilter(_selectedSDGFilter);
-        });
-      },
-      child: Container(
-        margin: const EdgeInsets.only(right: 8.0),
-        padding: const EdgeInsets.all(4.0),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(8.0),
-          border: Border.all(
-            color: color,
-            width: 2.0,
-          ),
-        ),
-        child: Column(
-          children: [
-            // Replace with actual SDG icon when available
-            Icon(
-              Icons.eco,
-              color: isSelected ? Colors.white : color,
-              size: 24.0,
-            ),
-            Text(
-              'SDG $number',
-              style: TextStyle(
-                color: isSelected ? Colors.white : color,
-                fontSize: 12.0,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Old _buildSDGIcon method removed - now using the reusable SDGIconWidget
 }
