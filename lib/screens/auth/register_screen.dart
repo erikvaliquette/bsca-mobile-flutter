@@ -2,23 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -34,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your password';
+      return 'Please enter a password';
     }
     if (value.length < 6) {
       return 'Password must be at least 6 characters';
@@ -42,10 +45,20 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  Future<void> _login() async {
+  String? _validateConfirmPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please confirm your password';
+    }
+    if (value != _passwordController.text) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      await authProvider.signIn(
+      await authProvider.signUp(
         _emailController.text.trim(),
         _passwordController.text,
       );
@@ -58,18 +71,21 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       } else if (authProvider.isAuthenticated && mounted) {
-        // Navigate to home screen on successful login
+        // If auto-signed in after registration, navigate to home screen
         Navigator.of(context).pushReplacementNamed('/home');
+      } else if (mounted) {
+        // If email verification is required, show message and return to login
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Registration successful! Please check your email to verify your account.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Navigate back to login screen after successful registration
+        Navigator.of(context).pushReplacementNamed('/login');
       }
     }
-  }
-
-  void _navigateToRegister() {
-    Navigator.of(context).pushNamed('/register');
-  }
-
-  void _navigateToForgotPassword() {
-    Navigator.of(context).pushNamed('/forgot-password');
   }
 
   @override
@@ -78,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login'),
+        title: const Text('Register'),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -89,18 +105,17 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
-                // Logo or app name
+                const SizedBox(height: 20),
                 Center(
                   child: Text(
-                    'BSCA Mobile',
+                    'Create Account',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).primaryColor,
                     ),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
@@ -134,17 +149,31 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: _validatePassword,
                   enabled: !authProvider.isLoading,
                 ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: authProvider.isLoading ? null : _navigateToForgotPassword,
-                    child: const Text('Forgot Password?'),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
                   ),
+                  obscureText: _obscureConfirmPassword,
+                  validator: _validateConfirmPassword,
+                  enabled: !authProvider.isLoading,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: authProvider.isLoading ? null : _login,
+                  onPressed: authProvider.isLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
@@ -157,12 +186,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Sign In'),
+                      : const Text('Create Account'),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: authProvider.isLoading ? null : _navigateToRegister,
-                  child: const Text('Don\'t have an account? Sign Up'),
+                  onPressed: authProvider.isLoading
+                      ? null
+                      : () => Navigator.of(context).pop(),
+                  child: const Text('Already have an account? Sign In'),
                 ),
               ],
             ),

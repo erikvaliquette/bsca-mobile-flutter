@@ -1,0 +1,473 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../models/business_connection_model.dart';
+import '../../providers/business_connection_provider.dart';
+import '../../services/supabase/supabase_client.dart';
+
+class NetworkScreen extends StatefulWidget {
+  const NetworkScreen({super.key});
+
+  @override
+  State<NetworkScreen> createState() => _NetworkScreenState();
+}
+
+class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateMixin {
+  late TabController _tabController;
+  int? _selectedSDGFilter;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    
+    // Fetch connections when the screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      provider.fetchConnections();
+      provider.fetchDiscoverProfiles();
+      
+      // Listen for tab changes to refresh data if needed
+      _tabController.addListener(() {
+        if (_tabController.index == 0) {
+          provider.fetchConnections();
+        } else if (_tabController.index == 1) {
+          provider.fetchDiscoverProfiles();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Network'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'My Connections'),
+            Tab(text: 'Discover'),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          // Search and Filter Bar
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0.0),
+                  ),
+                  onChanged: (value) {
+                    // Update search query in provider
+                    Provider.of<BusinessConnectionProvider>(context, listen: false)
+                        .setSearchQuery(value);
+                  },
+                ),
+                
+                const SizedBox(height: 16.0),
+                
+                // SDG Filter Icons
+                Container(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Filter by SDG Goal:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8.0),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildSDGIcon(1, Colors.red, 'assets/icons/sdg1.png'),
+                            _buildSDGIcon(2, Colors.amber, 'assets/icons/sdg2.png'),
+                            _buildSDGIcon(3, Colors.green, 'assets/icons/sdg3.png'),
+                            _buildSDGIcon(4, Colors.red.shade800, 'assets/icons/sdg4.png'),
+                            _buildSDGIcon(5, Colors.orange, 'assets/icons/sdg5.png'),
+                            _buildSDGIcon(6, Colors.blue.shade300, 'assets/icons/sdg6.png'),
+                            _buildSDGIcon(7, Colors.amber.shade300, 'assets/icons/sdg7.png'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Connections Grid
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  // My Connections Tab
+                  Consumer<BusinessConnectionProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      if (provider.error != null) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Error loading connections',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => provider.fetchConnections(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      final connections = provider.filteredConnections;
+                      
+                      if (connections.isEmpty) {
+                        return const Center(
+                          child: Text('No connections found'),
+                        );
+                      }
+                      
+                      return GridView.builder(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 16.0,
+                          mainAxisSpacing: 16.0,
+                          childAspectRatio: 0.85,
+                        ),
+                        itemCount: connections.length,
+                        itemBuilder: (context, index) {
+                          return _buildBusinessConnectionCard(
+                            connections[index],
+                            showActions: true,
+                            onDisconnect: () => _handleDisconnect(connections[index]),
+                            onMessage: () => _handleMessage(connections[index]),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  
+                  // Discover Tab
+                  Consumer<BusinessConnectionProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoadingDiscover) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      if (provider.discoverError != null) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Error loading discover profiles',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => provider.fetchDiscoverProfiles(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      final profiles = provider.filteredDiscoverProfiles;
+                      
+                      if (profiles.isEmpty) {
+                        return const Center(
+                          child: Text('No profiles found'),
+                        );
+                      }
+                      
+                      return GridView.builder(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 16.0,
+                          mainAxisSpacing: 16.0,
+                          childAspectRatio: 0.85,
+                        ),
+                        itemCount: profiles.length,
+                        itemBuilder: (context, index) {
+                          return _buildBusinessConnectionCard(
+                            profiles[index],
+                            isDiscover: true,
+                            onConnect: () => _handleConnect(profiles[index]),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Handle disconnect action
+  void _handleDisconnect(BusinessConnection connection) async {
+    try {
+      final client = SupabaseService.client;
+      await client
+          .from('business_connections')
+          .delete()
+          .eq('id', connection.id);
+      
+      // Refresh connections
+      final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      provider.fetchConnections();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connection with ${connection.name} removed')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error removing connection: $e')),
+      );
+    }
+  }
+  
+  // Handle message action
+  void _handleMessage(BusinessConnection connection) {
+    // Navigate to message screen with the connection
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text('Message ${connection.name}')),
+          body: Center(child: Text('Message functionality coming soon')),
+        ),
+      ),
+    );
+  }
+  
+  // Handle connect action for discover profiles
+  void _handleConnect(BusinessConnection profile) async {
+    try {
+      final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      await provider.sendConnectionRequest(profile.counterpartyId);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connection request sent to ${profile.name}')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending connection request: $e')),
+      );
+    }
+  }
+  
+  Widget _buildBusinessConnectionCard(
+    BusinessConnection connection, {
+    bool isDiscover = false,
+    bool showActions = false,
+    VoidCallback? onConnect,
+    VoidCallback? onDisconnect,
+    VoidCallback? onMessage,
+  }) {
+    // Determine avatar color based on connection id to ensure consistency
+    final int colorValue = connection.id.hashCode % 2;
+    final Color avatarColor = colorValue == 0 ? Colors.blue : Colors.blue.shade200;
+    
+    // Format location for display
+    final String displayLocation = connection.location ?? '';
+    
+    return Card(
+      elevation: 2.0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      color: avatarColor,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Avatar (either image or text)
+          Positioned(
+            top: 20,
+            child: connection.profileImageUrl != null && connection.profileImageUrl!.isNotEmpty
+                ? CircleAvatar(
+                    radius: 36.0,
+                    backgroundImage: NetworkImage(connection.profileImageUrl!),
+                  )
+                : Text(
+                    connection.initials,
+                    style: const TextStyle(
+                      fontSize: 72.0,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+          
+          // Name and Location
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    connection.name,
+                    style: const TextStyle(
+                      fontSize: 18.0,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (displayLocation.isNotEmpty)
+                    Text(
+                      displayLocation,
+                      style: const TextStyle(
+                        fontSize: 14.0,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Action buttons
+          if (showActions)
+            Positioned(
+              top: 5,
+              right: 5,
+              child: Row(
+                children: [
+                  if (onMessage != null)
+                    IconButton(
+                      icon: const Icon(Icons.message, color: Colors.white),
+                      onPressed: onMessage,
+                      iconSize: 20,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Message',
+                    ),
+                  if (onDisconnect != null)
+                    IconButton(
+                      icon: const Icon(Icons.person_remove, color: Colors.white),
+                      onPressed: onDisconnect,
+                      iconSize: 20,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Disconnect',
+                    ),
+                ],
+              ),
+            ),
+          
+          // Connect button for discover profiles
+          if (isDiscover && onConnect != null)
+            Positioned(
+              bottom: 70,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.person_add, size: 16),
+                label: const Text('Connect'),
+                onPressed: onConnect,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.blue,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSDGIcon(int number, Color color, String iconPath) {
+    bool isSelected = _selectedSDGFilter == number;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            // If already selected, deselect it
+            _selectedSDGFilter = null;
+          } else {
+            // Otherwise, select it
+            _selectedSDGFilter = number;
+          }
+          
+          // Update filter in provider
+          Provider.of<BusinessConnectionProvider>(context, listen: false)
+              .setSDGFilter(_selectedSDGFilter);
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(right: 8.0),
+        padding: const EdgeInsets.all(4.0),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(8.0),
+          border: Border.all(
+            color: color,
+            width: 2.0,
+          ),
+        ),
+        child: Column(
+          children: [
+            // Replace with actual SDG icon when available
+            Icon(
+              Icons.eco,
+              color: isSelected ? Colors.white : color,
+              size: 24.0,
+            ),
+            Text(
+              'SDG $number',
+              style: TextStyle(
+                color: isSelected ? Colors.white : color,
+                fontSize: 12.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
