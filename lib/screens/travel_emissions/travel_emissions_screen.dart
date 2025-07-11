@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' show openAppSettings;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -103,8 +104,29 @@ class TravelEmissionsScreen extends HookWidget {
           // Request location permissions
           final status = await Permission.location.request();
           if (status != PermissionStatus.granted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permission is required')),
+            // Show dialog with option to open settings
+            showDialog(
+              context: context,
+              builder: (BuildContext context) => AlertDialog(
+                title: const Text('Location Permission Required'),
+                content: const Text(
+                  'This app needs location access to track your travel emissions. '
+                  'Please enable location permissions in your device settings.'
+                ),
+                actions: [
+                  TextButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    child: const Text('Open Settings'),
+                    onPressed: () {
+                      openAppSettings();
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
             );
             isLoading.value = false;
             return;
@@ -137,8 +159,29 @@ class TravelEmissionsScreen extends HookWidget {
           }
           
           if (permission == LocationPermission.deniedForever) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permissions are permanently denied')),
+            // Show dialog with option to open settings
+            showDialog(
+              context: context,
+              builder: (BuildContext context) => AlertDialog(
+                title: const Text('Location Permission Required'),
+                content: const Text(
+                  'Location permissions are permanently denied. '
+                  'Please enable location in your device settings to use this feature.'
+                ),
+                actions: [
+                  TextButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    child: const Text('Open Settings'),
+                    onPressed: () {
+                      openAppSettings();
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ],
+              ),
             );
             isLoading.value = false;
             return;
