@@ -120,12 +120,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).primaryColor,
-        child: Text(
-          (room.name?.isNotEmpty == true)
-              ? room.name![0].toUpperCase()
-              : 'C',
-          style: const TextStyle(color: Colors.white),
-        ),
+        backgroundImage: room.avatarUrl != null ? NetworkImage(room.avatarUrl!) : null,
+        child: room.avatarUrl == null
+            ? Text(
+                (room.name?.isNotEmpty == true)
+                    ? room.name![0].toUpperCase()
+                    : 'C',
+                style: const TextStyle(color: Colors.white),
+              )
+            : null,
       ),
       title: Text(
         room.name ?? 'Conversation',

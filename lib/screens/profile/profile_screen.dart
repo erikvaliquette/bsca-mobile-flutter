@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/profile_model.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -42,12 +43,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              // Will implement edit profile functionality later
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Edit profile feature coming soon'),
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const EditProfileScreen(),
                 ),
-              );
+              ).then((_) {
+                // Refresh the profile data when returning from edit screen
+                Provider.of<ProfileProvider>(context, listen: false).fetchCurrentUserProfile();
+              });
             },
             tooltip: 'Edit Profile',
           ),
@@ -211,6 +214,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: profile!.certifications!.map((cert) => _buildCertificationItem(context, cert)).toList(),
                       ),
+                    ),
+                  
+                  // Default Settings Section
+                  if (profile?.preferences != null && profile!.preferences!.isNotEmpty)
+                    _buildSection(
+                      context,
+                      'Default Settings',
+                      _buildDefaultSettingsSection(context, profile!.preferences!),
                     ),
                     
                   const SizedBox(height: 32),
@@ -453,4 +464,75 @@ Widget _buildCertificationItem(BuildContext context, Certification cert) {
       ),
     ),
   );
+}
+
+Widget _buildDefaultSettingsSection(BuildContext context, Map<String, dynamic> preferences) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Email Notifications
+      ListTile(
+        title: const Text('Email Notifications'),
+        trailing: Icon(
+          preferences['email_notifications'] == true ? Icons.toggle_on : Icons.toggle_off,
+          color: preferences['email_notifications'] == true ? Theme.of(context).colorScheme.primary : Colors.grey,
+          size: 32,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      
+      // Push Notifications
+      ListTile(
+        title: const Text('Push Notifications'),
+        trailing: Icon(
+          preferences['push_notifications'] == true ? Icons.toggle_on : Icons.toggle_off,
+          color: preferences['push_notifications'] == true ? Theme.of(context).colorScheme.primary : Colors.grey,
+          size: 32,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      
+      // Public Profile
+      ListTile(
+        title: const Text('Public Profile'),
+        trailing: Icon(
+          preferences['public_profile'] == true ? Icons.toggle_on : Icons.toggle_off,
+          color: preferences['public_profile'] == true ? Theme.of(context).colorScheme.primary : Colors.grey,
+          size: 32,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      
+      // Language
+      if (preferences['language'] != null) ListTile(
+        title: const Text('Language'),
+        trailing: Text(
+          preferences['language'].toString(),
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+        contentPadding: EdgeInsets.zero,
+      ),
+      
+      // Display any other preferences
+      ...preferences.entries
+        .where((entry) => !['email_notifications', 'push_notifications', 'public_profile', 'language'].contains(entry.key))
+        .map((entry) => ListTile(
+          title: Text(_formatPreferenceKey(entry.key)),
+          trailing: Text(
+            entry.value.toString(),
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          contentPadding: EdgeInsets.zero,
+        )),
+    ],
+  );
+}
+
+String _formatPreferenceKey(String key) {
+  // Convert camelCase to Title Case with spaces
+  final result = key.replaceAllMapped(
+    RegExp(r'([A-Z])'),
+    (match) => ' ${match.group(0)}',
+  );
+  return result[0].toUpperCase() + result.substring(1);
 }

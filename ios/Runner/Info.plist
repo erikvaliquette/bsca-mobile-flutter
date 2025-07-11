@@ -49,6 +49,12 @@
 	<array>
 		<string>_dartobservatory._tcp</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs access to location when in use to track your travel emissions.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs access to location when open and in the background to track your travel emissions.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app needs access to location when in the background to track your travel emissions.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs access to the local network for development and debugging purposes.</string>
 </dict>

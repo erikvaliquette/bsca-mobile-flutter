@@ -11,6 +11,7 @@ class ChatRoomModel {
   final int? unreadCount;
   final List<String>? participantIds;
   final bool? isStarred;
+  final String? avatarUrl;
 
   ChatRoomModel({
     required this.id,
@@ -23,6 +24,7 @@ class ChatRoomModel {
     this.unreadCount,
     this.participantIds,
     this.isStarred,
+    this.avatarUrl,
   });
 
   factory ChatRoomModel.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,7 @@ class ChatRoomModel {
               : json['last_message_time'])
           : null,
       unreadCount: json['unread_count'],
+      avatarUrl: json['avatar_url'],
       participantIds: json['participant_ids'] != null 
           ? List<String>.from(json['participant_ids'])
           : null,

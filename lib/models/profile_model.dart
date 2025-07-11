@@ -217,6 +217,10 @@ class ProfileModel {
       'preferences': preferences,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'sdg_goals': sdgGoals,
+      'work_history': workHistory?.map((work) => work.toJson()).toList(),
+      'education': education?.map((edu) => edu.toJson()).toList(),
+      'certifications': certifications?.map((cert) => cert.toJson()).toList(),
     };
   }
 
@@ -229,6 +233,10 @@ class ProfileModel {
     Map<String, dynamic>? preferences,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<String>? sdgGoals,
+    List<WorkHistory>? workHistory,
+    List<Education>? education,
+    List<Certification>? certifications,
   }) {
     return ProfileModel(
       id: id ?? this.id,
@@ -239,6 +247,10 @@ class ProfileModel {
       preferences: preferences ?? this.preferences,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      sdgGoals: sdgGoals ?? this.sdgGoals,
+      workHistory: workHistory ?? this.workHistory,
+      education: education ?? this.education,
+      certifications: certifications ?? this.certifications,
     );
   }
 

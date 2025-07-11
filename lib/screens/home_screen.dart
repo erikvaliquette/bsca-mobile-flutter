@@ -6,6 +6,7 @@ import 'profile/profile_screen.dart';
 import 'messaging/chat_list_screen.dart';
 import 'more/more_screen.dart';
 import 'network/network_screen.dart';
+import 'travel_emissions/travel_emissions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = [
     const DashboardScreen(),
     const NetworkScreen(),
-    const PlaceholderScreen(title: 'Travel'),
+    const TravelEmissionsScreen(),
     const ChatListScreen(),
     const MoreScreen(),
   ];

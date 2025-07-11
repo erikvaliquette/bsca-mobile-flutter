@@ -33,5 +33,11 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocationUsageDescription</key>
+	<string>This app needs access to location to track your travel emissions.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs access to location when in use to track your travel emissions.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs access to location when open and in the background to track your travel emissions.</string>
 </dict>
 </plist>

@@ -222,12 +222,17 @@ class _ConversationScreenState extends State<ConversationScreen> {
             CircleAvatar(
               radius: 16,
               backgroundColor: Theme.of(context).primaryColor.withOpacity(0.5),
-              child: Text(
-                message.senderName?.isNotEmpty == true
-                    ? message.senderName![0].toUpperCase()
-                    : 'U',
-                style: const TextStyle(color: Colors.white),
-              ),
+              backgroundImage: message.senderAvatarUrl != null
+                  ? NetworkImage(message.senderAvatarUrl!)
+                  : null,
+              child: message.senderAvatarUrl == null
+                  ? Text(
+                      message.senderName?.isNotEmpty == true
+                          ? message.senderName![0].toUpperCase()
+                          : 'U',
+                      style: const TextStyle(color: Colors.white),
+                    )
+                  : null,
             ),
           const SizedBox(width: 8),
           Flexible(
