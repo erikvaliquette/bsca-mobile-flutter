@@ -81,7 +81,7 @@ class TravelEmissionsScreen extends HookWidget {
     double getEmissionFactor(String mode) {
       final modeData = travelModes.firstWhere(
         (m) => m['id'] == mode,
-        orElse: () => travelModes[0],
+        orElse: () => travelModes[0] as Map<String, Object>,
       );
       return modeData['emissionFactor'] as double;
     }
@@ -98,32 +98,55 @@ class TravelEmissionsScreen extends HookWidget {
       isLoading.value = true;
       
       try {
-        // Check if we're on a platform that supports permission_handler
-        bool permissionGranted = true;
-        try {
-          // Request location permissions
-          final status = await Permission.location.request();
-          if (status != PermissionStatus.granted) {
-            // Show dialog with option to open settings
+        // First check if location services are enabled
+        final locationEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!locationEnabled) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              title: const Text('Location Services Disabled'),
+              content: const Text(
+                'Please enable location services in your device settings to track your travel emissions.'
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                TextButton(
+                  child: const Text('Open Settings'),
+                  onPressed: () {
+                    Geolocator.openLocationSettings();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          );
+          isLoading.value = false;
+          return;
+        }
+        
+        // Check permission status
+        LocationPermission permission = await Geolocator.checkPermission();
+        
+        // Request permission if not granted
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+          
+          if (permission == LocationPermission.denied) {
             showDialog(
               context: context,
               builder: (BuildContext context) => AlertDialog(
                 title: const Text('Location Permission Required'),
                 content: const Text(
                   'This app needs location access to track your travel emissions. '
-                  'Please enable location permissions in your device settings.'
+                  'Please grant location permission to use this feature.'
                 ),
                 actions: [
                   TextButton(
-                    child: const Text('Cancel'),
+                    child: const Text('OK'),
                     onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  TextButton(
-                    child: const Text('Open Settings'),
-                    onPressed: () {
-                      openAppSettings();
-                      Navigator.of(context).pop();
-                    },
                   ),
                 ],
               ),
@@ -131,61 +154,35 @@ class TravelEmissionsScreen extends HookWidget {
             isLoading.value = false;
             return;
           }
-        } catch (e) {
-          // On platforms where permission_handler is not available (like macOS),
-          // we'll try to proceed with Geolocator directly
-          debugPrint('Permission handler not available on this platform: $e');
-          
-          // Check if location is available using Geolocator instead
-          final locationEnabled = await Geolocator.isLocationServiceEnabled();
-          if (!locationEnabled) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location services are disabled')),
-            );
-            isLoading.value = false;
-            return;
-          }
-          
-          LocationPermission permission = await Geolocator.checkPermission();
-          if (permission == LocationPermission.denied) {
-            permission = await Geolocator.requestPermission();
-            if (permission == LocationPermission.denied) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Location permissions are denied')),
-              );
-              isLoading.value = false;
-              return;
-            }
-          }
-          
-          if (permission == LocationPermission.deniedForever) {
-            // Show dialog with option to open settings
-            showDialog(
-              context: context,
-              builder: (BuildContext context) => AlertDialog(
-                title: const Text('Location Permission Required'),
-                content: const Text(
-                  'Location permissions are permanently denied. '
-                  'Please enable location in your device settings to use this feature.'
-                ),
-                actions: [
-                  TextButton(
-                    child: const Text('Cancel'),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  TextButton(
-                    child: const Text('Open Settings'),
-                    onPressed: () {
-                      openAppSettings();
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
+        }
+        
+        // Handle permanently denied permissions
+        if (permission == LocationPermission.deniedForever) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              title: const Text('Location Permission Required'),
+              content: const Text(
+                'Location permissions are permanently denied. '
+                'Please enable location in your device settings to use this feature.'
               ),
-            );
-            isLoading.value = false;
-            return;
-          }
+              actions: [
+                TextButton(
+                  child: const Text('Cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                TextButton(
+                  child: const Text('Open Settings'),
+                  onPressed: () {
+                    Geolocator.openAppSettings();
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            ),
+          );
+          isLoading.value = false;
+          return;
         }
         
         // Get current position
@@ -397,7 +394,7 @@ class TravelEmissionsScreen extends HookWidget {
                                         final mode = emissionsByMode.keys.elementAt(value.toInt());
                                         final modeData = travelModes.firstWhere(
                                           (m) => m['id'] == mode,
-                                          orElse: () => travelModes[0],
+                                          orElse: () => travelModes[0] as Map<String, Object>,
                                         );
                                         return Icon(modeData['icon'] as IconData);
                                       },
@@ -549,7 +546,7 @@ class TravelEmissionsScreen extends HookWidget {
                                   final trip = trips.value[index];
                                   final modeData = travelModes.firstWhere(
                                     (m) => m['id'] == trip.mode,
-                                    orElse: () => travelModes[0],
+                                    orElse: () => travelModes[0] as Map<String, Object>,
                                   );
                                   
                                   return Card(
@@ -653,7 +650,7 @@ class TravelEmissionsScreen extends HookWidget {
                           TripDetailItem(
                             icon: travelModes.firstWhere(
                               (m) => m['id'] == selectedTrip.value!.mode,
-                              orElse: () => travelModes[0],
+                              orElse: () => travelModes[0] as Map<String, Object>,
                             )['icon'] as IconData,
                             label: 'Mode of Travel',
                             value: getTravelModeName(selectedTrip.value!.mode, travelModes),

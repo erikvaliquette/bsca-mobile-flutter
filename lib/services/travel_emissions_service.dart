@@ -79,7 +79,7 @@ class TravelEmissionsService {
   Future<bool> addLocationPoint(LocationPoint point) async {
     try {
       await _client
-          .from('travel_location_points')
+          .from('travel_locations')
           .insert(point.toJson());
       
       return true;
