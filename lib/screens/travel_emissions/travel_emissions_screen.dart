@@ -19,43 +19,82 @@ class TravelEmissionsScreen extends HookWidget {
   // Show dialog to edit a trip
   void _showEditTripDialog(BuildContext context, TripData trip, ValueNotifier<String> selectedMode, ValueNotifier<String> selectedPurpose) {
     // Set the initial purpose value based on the trip's purpose
-    selectedPurpose.value = trip.purpose ?? 'Personal';
+    String dialogPurpose = trip.purpose ?? 'Personal';
     
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Trip'),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'Edit Trip',
+            style: TextStyle(
+              color: Theme.of(context).primaryColor,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Purpose selection
-                const Text('Trip Purpose'),
+                const Text(
+                  'Trip Purpose',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('Personal'),
-                        value: 'Personal',
-                        groupValue: selectedPurpose.value,
-                        onChanged: (value) {
-                          if (value != null) {
-                            selectedPurpose.value = value;
-                          }
-                        },
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          unselectedWidgetColor: Colors.grey[400],
+                        ),
+                        child: RadioListTile<String>(
+                          title: const Text(
+                            'Personal',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          value: 'Personal',
+                          groupValue: dialogPurpose,
+                          activeColor: Theme.of(context).primaryColor,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                dialogPurpose = value;
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('Business'),
-                        value: 'Business',
-                        groupValue: selectedPurpose.value,
-                        onChanged: (value) {
-                          if (value != null) {
-                            selectedPurpose.value = value;
-                          }
-                        },
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          unselectedWidgetColor: Colors.grey[400],
+                        ),
+                        child: RadioListTile<String>(
+                          title: const Text(
+                            'Business',
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          value: 'Business',
+                          groupValue: dialogPurpose,
+                          activeColor: Theme.of(context).primaryColor,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                dialogPurpose = value;
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
                   ],
@@ -63,38 +102,64 @@ class TravelEmissionsScreen extends HookWidget {
               ],
             ),
           ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  // Update trip in database
-                  await TravelEmissionsService.instance.updateTrip(
-                    trip.id!,
-                    {
-                      'purpose': selectedPurpose.value,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Colors.grey[200],
+                    ),
+                    child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      try {
+                        // Update the ValueNotifier with the dialog value
+                        selectedPurpose.value = dialogPurpose;
+                        
+                        // Update trip in database
+                        await TravelEmissionsService.instance.updateTrip(
+                          trip.id!,
+                          {
+                            'purpose': dialogPurpose,
+                          },
+                        );
+                        
+                        // Close the dialog
+                        Navigator.of(context).pop();
+                        
+                        // Show success message
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Trip updated successfully')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error updating trip: $e')),
+                        );
+                      }
                     },
-                  );
-                  
-                  // Close the dialog
-                  Navigator.of(context).pop();
-                  
-                  // Show success message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Trip updated successfully')),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error updating trip: $e')),
-                  );
-                }
-              },
-              child: const Text('Save'),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Theme.of(context).primaryColor,
+                    ),
+                    child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
           ],
+            );
+          },
         );
       },
     );
@@ -536,41 +601,69 @@ class TravelEmissionsScreen extends HookWidget {
                         const SizedBox(height: 8),
                         
                         // Trip purpose selection
-                        const Text(
+                        Text(
                           'Trip Purpose',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: RadioListTile<String>(
-                                title: const Text('Personal'),
-                                value: 'Personal',
-                                groupValue: selectedPurpose.value,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    selectedPurpose.value = value;
-                                  }
-                                },
+                        const SizedBox(height: 16),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Theme(
+                                  data: Theme.of(context).copyWith(
+                                    unselectedWidgetColor: Colors.grey[400],
+                                  ),
+                                  child: RadioListTile<String>(
+                                    title: Text(
+                                      'Personal',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: selectedPurpose.value == 'Personal' 
+                                            ? Theme.of(context).primaryColor 
+                                            : Colors.grey[700],
+                                      ),
+                                    ),
+                                    value: 'Personal',
+                                    groupValue: selectedPurpose.value,
+                                    activeColor: Theme.of(context).primaryColor,
+                                    onChanged: (value) => selectedPurpose.value = value!,
+                                  ),
+                                ),
                               ),
-                            ),
-                            Expanded(
-                              child: RadioListTile<String>(
-                                title: const Text('Business'),
-                                value: 'Business',
-                                groupValue: selectedPurpose.value,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    selectedPurpose.value = value;
-                                  }
-                                },
+                              Expanded(
+                                child: Theme(
+                                  data: Theme.of(context).copyWith(
+                                    unselectedWidgetColor: Colors.grey[400],
+                                  ),
+                                  child: RadioListTile<String>(
+                                    title: Text(
+                                      'Business',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: selectedPurpose.value == 'Business' 
+                                            ? Theme.of(context).primaryColor 
+                                            : Colors.grey[700],
+                                      ),
+                                    ),
+                                    value: 'Business',
+                                    groupValue: selectedPurpose.value,
+                                    activeColor: Theme.of(context).primaryColor,
+                                    onChanged: (value) => selectedPurpose.value = value!,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
 
@@ -793,107 +886,6 @@ class TravelEmissionsScreen extends HookWidget {
                     ),
                   ),
                 ),
-                
-                // Edit trip dialog
-                if (editingTrip.value != null)
-                  AlertDialog(
-                    title: const Text('Edit Trip'),
-                    content: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Purpose selection
-                          const Text('Trip Purpose'),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: RadioListTile<String>(
-                                  title: const Text('Personal'),
-                                  value: 'Personal',
-                                  groupValue: selectedPurpose.value,
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      selectedPurpose.value = value;
-                                    }
-                                  },
-                                ),
-                              ),
-                              Expanded(
-                                child: RadioListTile<String>(
-                                  title: const Text('Business'),
-                                  value: 'Business',
-                                  groupValue: selectedPurpose.value,
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      selectedPurpose.value = value;
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          editingTrip.value = null;
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          if (editingTrip.value != null) {
-                            isLoading.value = true;
-                            try {
-                              // Update trip in database
-                              await TravelEmissionsService.instance.updateTrip(
-                                editingTrip.value!.id!,
-                                {
-                                  'purpose': selectedPurpose.value,
-                                },
-                              );
-                              
-                              // Update trip in list
-                              final index = trips.value.indexWhere((t) => t.id == editingTrip.value!.id);
-                              if (index != -1) {
-                                final updatedTrip = TripData(
-                                  id: editingTrip.value!.id,
-                                  userId: editingTrip.value!.userId,
-                                  startTime: editingTrip.value!.startTime,
-                                  endTime: editingTrip.value!.endTime,
-                                  distance: editingTrip.value!.distance,
-                                  mode: editingTrip.value!.mode,
-                                  emissions: editingTrip.value!.emissions,
-                                  isActive: editingTrip.value!.isActive,
-                                  startLocation: editingTrip.value!.startLocation,
-                                  endLocation: editingTrip.value!.endLocation,
-                                  purpose: selectedPurpose.value,
-                                );
-                                
-                                final updatedTrips = List<TripData>.from(trips.value);
-                                updatedTrips[index] = updatedTrip;
-                                trips.value = updatedTrips;
-                                
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Trip updated successfully')),
-                                );
-                              }
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error updating trip: $e')),
-                              );
-                            } finally {
-                              isLoading.value = false;
-                              editingTrip.value = null;
-                            }
-                          }
-                        },
-                        child: const Text('Save'),
-                      ),
-                    ],
-                  ),
       // Trip details modal
       bottomSheet: showTripDetails.value && selectedTrip.value != null
           ? Container(
