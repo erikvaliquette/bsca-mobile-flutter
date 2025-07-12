@@ -15,10 +15,95 @@ import '../../widgets/loading_indicator.dart';
 
 class TravelEmissionsScreen extends HookWidget {
   const TravelEmissionsScreen({Key? key}) : super(key: key);
+  
+  // Show dialog to edit a trip
+  void _showEditTripDialog(BuildContext context, TripData trip, ValueNotifier<String> selectedMode, ValueNotifier<String> selectedPurpose) {
+    // Set the initial purpose value based on the trip's purpose
+    selectedPurpose.value = trip.purpose ?? 'Personal';
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Trip'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Purpose selection
+                const Text('Trip Purpose'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Personal'),
+                        value: 'Personal',
+                        groupValue: selectedPurpose.value,
+                        onChanged: (value) {
+                          if (value != null) {
+                            selectedPurpose.value = value;
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<String>(
+                        title: const Text('Business'),
+                        value: 'Business',
+                        groupValue: selectedPurpose.value,
+                        onChanged: (value) {
+                          if (value != null) {
+                            selectedPurpose.value = value;
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                try {
+                  // Update trip in database
+                  await TravelEmissionsService.instance.updateTrip(
+                    trip.id!,
+                    {
+                      'purpose': selectedPurpose.value,
+                    },
+                  );
+                  
+                  // Close the dialog
+                  Navigator.of(context).pop();
+                  
+                  // Show success message
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Trip updated successfully')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error updating trip: $e')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final selectedMode = useState('car');
+    final selectedPurpose = useState('Personal');
     final isTracking = useState(false);
     final isLoading = useState(false);
     final trips = useState<List<TripData>>([]);
@@ -29,6 +114,7 @@ class TravelEmissionsScreen extends HookWidget {
     final totalEmissions = useState(0.0);
     final showTripDetails = useState(false);
     final selectedTrip = useState<TripData?>(null);
+    final editingTrip = useState<TripData?>(null);
     
     // Get the current user
     final user = Supabase.instance.client.auth.currentUser;
@@ -81,7 +167,7 @@ class TravelEmissionsScreen extends HookWidget {
     double getEmissionFactor(String mode) {
       final modeData = travelModes.firstWhere(
         (m) => m['id'] == mode,
-        orElse: () => travelModes[0] as Map<String, Object>,
+        orElse: () => travelModes[0],
       );
       return modeData['emissionFactor'] as double;
     }
@@ -200,6 +286,7 @@ class TravelEmissionsScreen extends HookWidget {
           mode: selectedMode.value,
           emissions: 0.0,
           isActive: true,
+          purpose: selectedPurpose.value,
         );
         
         // Save trip to database
@@ -394,7 +481,7 @@ class TravelEmissionsScreen extends HookWidget {
                                         final mode = emissionsByMode.keys.elementAt(value.toInt());
                                         final modeData = travelModes.firstWhere(
                                           (m) => m['id'] == mode,
-                                          orElse: () => travelModes[0] as Map<String, Object>,
+                                          orElse: () => travelModes[0],
                                         );
                                         return Icon(modeData['icon'] as IconData);
                                       },
@@ -440,13 +527,53 @@ class TravelEmissionsScreen extends HookWidget {
                         
                         // Mode selection
                         const Text(
-                          'Select Travel Mode',
+                          'Select Mode of Travel',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
+                        
+                        // Trip purpose selection
+                        const Text(
+                          'Trip Purpose',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: const Text('Personal'),
+                                value: 'Personal',
+                                groupValue: selectedPurpose.value,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    selectedPurpose.value = value;
+                                  }
+                                },
+                              ),
+                            ),
+                            Expanded(
+                              child: RadioListTile<String>(
+                                title: const Text('Business'),
+                                value: 'Business',
+                                groupValue: selectedPurpose.value,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    selectedPurpose.value = value;
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -546,30 +673,118 @@ class TravelEmissionsScreen extends HookWidget {
                                   final trip = trips.value[index];
                                   final modeData = travelModes.firstWhere(
                                     (m) => m['id'] == trip.mode,
-                                    orElse: () => travelModes[0] as Map<String, Object>,
+                                    orElse: () => travelModes[0],
                                   );
                                   
-                                  return Card(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    child: ListTile(
-                                      leading: Icon(modeData['icon'] as IconData),
-                                      title: Text(
-                                        '${modeData['name']} - ${trip.distance.toStringAsFixed(2)} km',
+                                  return Dismissible(
+                                    key: Key(trip.id ?? 'trip-$index'),
+                                    background: Container(
+                                      color: Colors.blue,
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.only(left: 20),
+                                      child: const Icon(
+                                        Icons.edit,
+                                        color: Colors.white,
                                       ),
-                                      subtitle: Text(
-                                        '${DateFormat('MMM d, yyyy - HH:mm').format(trip.startTime)}'
-                                        '${trip.endTime != null ? ' to ${DateFormat('HH:mm').format(trip.endTime!)}' : ''}',
+                                    ),
+                                    secondaryBackground: Container(
+                                      color: Colors.red,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 20),
+                                      child: const Icon(
+                                        Icons.delete,
+                                        color: Colors.white,
                                       ),
-                                      trailing: Text(
-                                        '${trip.emissions.toStringAsFixed(2)} kg',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                    ),
+                                    confirmDismiss: (direction) async {
+                                      if (direction == DismissDirection.endToStart) {
+                                        // Delete confirmation
+                                        return await showDialog(
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            return AlertDialog(
+                                              title: const Text('Confirm Delete'),
+                                              content: const Text('Are you sure you want to delete this trip?'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(context).pop(false),
+                                                  child: const Text('Cancel'),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(context).pop(true),
+                                                  child: const Text('Delete'),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      } else if (direction == DismissDirection.startToEnd) {
+                                        // Edit trip
+                                        _showEditTripDialog(context, trip, selectedMode, selectedPurpose);
+                                        return false; // Don't dismiss the item
+                                      }
+                                      return false;
+                                    },
+                                    onDismissed: (direction) async {
+                                      if (direction == DismissDirection.endToStart) {
+                                        // Delete the trip
+                                        isLoading.value = true;
+                                        try {
+                                          final success = await TravelEmissionsService.instance.deleteTrip(trip.id!);
+                                          if (success) {
+                                            // Remove from list
+                                            final updatedTrips = List<TripData>.from(trips.value);
+                                            updatedTrips.removeAt(index);
+                                            trips.value = updatedTrips;
+                                            
+                                            // Update total emissions
+                                            totalEmissions.value -= trip.emissions;
+                                            
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Trip deleted successfully')),
+                                            );
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Failed to delete trip')),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error deleting trip: $e')),
+                                          );
+                                        } finally {
+                                          isLoading.value = false;
+                                        }
+                                      }
+                                    },
+                                    child: Card(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      child: ListTile(
+                                        leading: Icon(modeData['icon'] as IconData),
+                                        title: Text(
+                                          '${modeData['name']} - ${trip.distance.toStringAsFixed(2)} km',
                                         ),
+                                        subtitle: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${DateFormat('MMM d, yyyy - HH:mm').format(trip.startTime)}'
+                                              '${trip.endTime != null ? ' to ${DateFormat('HH:mm').format(trip.endTime!)}' : ''}',
+                                            ),
+                                            Text('Purpose: ${trip.purpose ?? 'Not specified'}'),
+                                          ],
+                                        ),
+                                        trailing: Text(
+                                          '${trip.emissions.toStringAsFixed(2)} kg',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        onTap: () {
+                                          selectedTrip.value = trip;
+                                          showTripDetails.value = true;
+                                        },
                                       ),
-                                      onTap: () {
-                                        selectedTrip.value = trip;
-                                        showTripDetails.value = true;
-                                      },
                                     ),
                                   );
                                 },
@@ -578,6 +793,107 @@ class TravelEmissionsScreen extends HookWidget {
                     ),
                   ),
                 ),
+                
+                // Edit trip dialog
+                if (editingTrip.value != null)
+                  AlertDialog(
+                    title: const Text('Edit Trip'),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Purpose selection
+                          const Text('Trip Purpose'),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: RadioListTile<String>(
+                                  title: const Text('Personal'),
+                                  value: 'Personal',
+                                  groupValue: selectedPurpose.value,
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      selectedPurpose.value = value;
+                                    }
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: RadioListTile<String>(
+                                  title: const Text('Business'),
+                                  value: 'Business',
+                                  groupValue: selectedPurpose.value,
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      selectedPurpose.value = value;
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          editingTrip.value = null;
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          if (editingTrip.value != null) {
+                            isLoading.value = true;
+                            try {
+                              // Update trip in database
+                              await TravelEmissionsService.instance.updateTrip(
+                                editingTrip.value!.id!,
+                                {
+                                  'purpose': selectedPurpose.value,
+                                },
+                              );
+                              
+                              // Update trip in list
+                              final index = trips.value.indexWhere((t) => t.id == editingTrip.value!.id);
+                              if (index != -1) {
+                                final updatedTrip = TripData(
+                                  id: editingTrip.value!.id,
+                                  userId: editingTrip.value!.userId,
+                                  startTime: editingTrip.value!.startTime,
+                                  endTime: editingTrip.value!.endTime,
+                                  distance: editingTrip.value!.distance,
+                                  mode: editingTrip.value!.mode,
+                                  emissions: editingTrip.value!.emissions,
+                                  isActive: editingTrip.value!.isActive,
+                                  startLocation: editingTrip.value!.startLocation,
+                                  endLocation: editingTrip.value!.endLocation,
+                                  purpose: selectedPurpose.value,
+                                );
+                                
+                                final updatedTrips = List<TripData>.from(trips.value);
+                                updatedTrips[index] = updatedTrip;
+                                trips.value = updatedTrips;
+                                
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Trip updated successfully')),
+                                );
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error updating trip: $e')),
+                              );
+                            } finally {
+                              isLoading.value = false;
+                              editingTrip.value = null;
+                            }
+                          }
+                        },
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
       // Trip details modal
       bottomSheet: showTripDetails.value && selectedTrip.value != null
           ? Container(
@@ -650,10 +966,15 @@ class TravelEmissionsScreen extends HookWidget {
                           TripDetailItem(
                             icon: travelModes.firstWhere(
                               (m) => m['id'] == selectedTrip.value!.mode,
-                              orElse: () => travelModes[0] as Map<String, Object>,
+                              orElse: () => travelModes[0],
                             )['icon'] as IconData,
                             label: 'Mode of Travel',
                             value: getTravelModeName(selectedTrip.value!.mode, travelModes),
+                          ),
+                          TripDetailItem(
+                            icon: Icons.work,
+                            label: 'Purpose',
+                            value: selectedTrip.value!.purpose ?? 'Not specified',
                           ),
                           if (selectedTrip.value!.startLocation != null)
                             TripDetailItem(
@@ -883,24 +1204,26 @@ String getTravelModeName(String mode, List<Map<String, dynamic>> travelModes) {
 Color getModeColor(String mode) {
   switch (mode) {
     case 'car':
-      return Colors.red;
+      return Colors.blue;
     case 'motorcycle':
-      return Colors.deepOrange;
+      return Colors.orange;
     case 'truck':
       return Colors.brown;
     case 'bus':
-      return Colors.orange;
+      return Colors.green;
     case 'train':
-      return Colors.blue;
+      return Colors.purple;
     case 'boat':
       return Colors.lightBlue;
     case 'plane':
-      return Colors.purple;
+      return Colors.red;
     case 'bicycle':
-      return Colors.green;
-    case 'walk':
       return Colors.teal;
+    case 'walk':
+      return Colors.lime;
     default:
       return Colors.grey;
   }
 }
+
+

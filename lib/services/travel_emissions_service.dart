@@ -104,7 +104,7 @@ class TripData {
   final bool isActive;
   final DateTime? createdAt;
   final DateTime? updatedAt;
-  final bool? purpose;
+  final String? purpose;
   
   TripData({
     this.id,
