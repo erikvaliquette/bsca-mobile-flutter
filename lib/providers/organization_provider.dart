@@ -1,175 +1,393 @@
 import 'package:flutter/material.dart';
-import 'package:bsca_mobile_flutter/models/organization_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/organization_model.dart';
+import '../services/organization_service.dart';
 
 class OrganizationProvider with ChangeNotifier {
-  Organization? _organization;
+  List<Organization> _organizations = [];
+  Organization? _selectedOrganization;
   bool _isLoading = false;
   String? _error;
 
-  Organization? get organization => _organization;
+  List<Organization> get organizations => _organizations;
+  Organization? get selectedOrganization => _selectedOrganization;
   bool get isLoading => _isLoading;
   String? get error => _error;
-
-  // Mock data for demonstration purposes
-  Future<void> fetchOrganization() async {
-    _isLoading = true;
-    _error = null;
+  
+  // Set the selected organization and load its detailed data
+  Future<void> selectOrganization(Organization organization) async {
+    _selectedOrganization = organization;
     notifyListeners();
-
+    
+    // Load detailed data for the selected organization
+    await loadOrganizationDetails(organization.id);
+  }
+  
+  // Load detailed data for an organization
+  Future<void> loadOrganizationDetails(String organizationId) async {
+    _isLoading = true;
+    notifyListeners();
+    
     try {
-      // Simulate API call delay
-      await Future.delayed(const Duration(seconds: 1));
+      final index = _organizations.indexWhere((org) => org.id == organizationId);
+      if (index == -1) {
+        debugPrint('Organization not found in the list: $organizationId');
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
       
-      // Mock data
-      _organization = Organization(
-        id: '1',
-        name: 'Green Future Solutions',
-        description: 'A forward-thinking organization committed to sustainable development and environmental stewardship.',
-        logoUrl: 'https://via.placeholder.com/150',
-        website: 'https://greenfuturesolutions.example.com',
-        location: 'Montreal, Canada',
-        sustainabilityMetrics: [
-          SustainabilityMetric(
-            name: 'Renewable Energy',
-            value: '75',
-            unit: '%',
-            icon: Icons.bolt,
-          ),
-          SustainabilityMetric(
-            name: 'Waste Reduction',
-            value: '45',
-            unit: '%',
-            icon: Icons.delete_outline,
-          ),
-          SustainabilityMetric(
-            name: 'Water Conservation',
-            value: '30',
-            unit: '%',
-            icon: Icons.water_drop,
-          ),
-        ],
-        carbonFootprint: CarbonFootprint(
-          totalEmissions: 120.5,
-          unit: 'tonnes CO2e',
-          reductionGoal: 50.0,
-          reductionAchieved: 15.3,
-          categories: [
-            EmissionCategory(
-              name: 'Transportation',
-              value: 45.2,
-              icon: 'directions_car',
-              subcategories: [
-                EmissionSubcategory(
-                  name: 'Car',
-                  value: 25.5,
-                  fuelType: 'Petrol',
-                ),
-                EmissionSubcategory(
-                  name: 'Bus',
-                  value: 10.7,
-                  fuelType: 'Diesel',
-                ),
-                EmissionSubcategory(
-                  name: 'Plane',
-                  value: 9.0,
-                  fuelType: 'Jet Fuel',
-                ),
-              ],
-            ),
-            EmissionCategory(
-              name: 'Energy',
-              value: 55.8,
-              icon: 'lightbulb',
-            ),
-            EmissionCategory(
-              name: 'Waste',
-              value: 19.5,
-              icon: 'delete',
-            ),
-          ],
-        ),
-        teamMembers: [
-          TeamMember(
-            id: '1',
-            name: 'Sarah Johnson',
-            role: 'Sustainability Director',
-            photoUrl: 'https://via.placeholder.com/150',
-            email: 'sarah@example.com',
-          ),
-          TeamMember(
-            id: '2',
-            name: 'Michael Chen',
-            role: 'Environmental Analyst',
-            photoUrl: 'https://via.placeholder.com/150',
-            email: 'michael@example.com',
-          ),
-          TeamMember(
-            id: '3',
-            name: 'Aisha Patel',
-            role: 'Project Manager',
-            photoUrl: 'https://via.placeholder.com/150',
-            email: 'aisha@example.com',
-          ),
-        ],
-        sdgFocusAreas: [
-          'SDG 7: Affordable and Clean Energy',
-          'SDG 11: Sustainable Cities and Communities',
-          'SDG 13: Climate Action',
-        ],
-        recentActivities: [
-          OrganizationActivity(
-            id: '1',
-            title: 'Office Solar Panel Installation',
-            description: 'Completed installation of solar panels on our main office building.',
-            date: DateTime.now().subtract(const Duration(days: 5)),
-            imageUrl: 'https://via.placeholder.com/300x200',
-            type: ActivityType.achievement,
-          ),
-          OrganizationActivity(
-            id: '2',
-            title: 'Community Tree Planting',
-            description: 'Organized a tree planting event with local community members.',
-            date: DateTime.now().subtract(const Duration(days: 12)),
-            imageUrl: 'https://via.placeholder.com/300x200',
-            type: ActivityType.event,
-          ),
-          OrganizationActivity(
-            id: '3',
-            title: 'Carbon Neutral Commitment',
-            description: 'Announced our commitment to become carbon neutral by 2030.',
-            date: DateTime.now().subtract(const Duration(days: 30)),
-            imageUrl: 'https://via.placeholder.com/300x200',
-            type: ActivityType.announcement,
-          ),
-        ],
+      // Get additional organization data
+      final carbonFootprint = await OrganizationService.instance.getOrganizationCarbonFootprint(organizationId);
+      final sustainabilityMetrics = await OrganizationService.instance.getOrganizationSustainabilityMetrics(organizationId);
+      final teamMembers = await OrganizationService.instance.getOrganizationTeamMembers(organizationId);
+      final activities = await OrganizationService.instance.getOrganizationActivities(organizationId);
+      final sdgFocusAreas = await OrganizationService.instance.getOrganizationSdgFocusAreas(organizationId);
+      
+      // Update the organization with detailed data
+      _organizations[index] = _organizations[index].copyWith(
+        carbonFootprint: carbonFootprint,
+        sustainabilityMetrics: sustainabilityMetrics,
+        teamMembers: teamMembers,
+        activities: activities,
+        sdgFocusAreas: sdgFocusAreas,
       );
-
-      _isLoading = false;
-      notifyListeners();
+      
+      // Update selected organization if it's the one we just loaded
+      if (_selectedOrganization?.id == organizationId) {
+        _selectedOrganization = _organizations[index];
+      }
+      
+      debugPrint('Organization details loaded successfully for: ${_organizations[index].name}');
     } catch (e) {
-      _error = 'Failed to load organization data: ${e.toString()}';
+      debugPrint('Error loading organization details: $e');
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> updateOrganization(Organization updatedOrganization) async {
+  OrganizationProvider() {
+    fetchCurrentUserOrganization();
+  }
+
+  // Fetch all organizations for the current user
+  Future<void> fetchCurrentUserOrganization() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
-      // Simulate API call delay
-      await Future.delayed(const Duration(seconds: 1));
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        _error = 'User not authenticated';
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Get all organizations for the user
+      final userOrganizations = await OrganizationService.instance.getOrganizationsForUser(user.id);
       
-      // Update the organization
-      _organization = updatedOrganization;
-      
-      _isLoading = false;
-      notifyListeners();
+      if (userOrganizations.isNotEmpty) {
+        _organizations = userOrganizations;
+        
+        // Set the first organization as selected by default
+        _selectedOrganization = _organizations.first;
+        
+        debugPrint('${_organizations.length} organizations fetched successfully');
+      } else {
+        _error = 'No organizations found for this user. Please contact your administrator.';
+        debugPrint('No organizations found for user');
+      }
     } catch (e) {
-      _error = 'Failed to update organization data: ${e.toString()}';
+      _error = 'Error fetching organization data: ${e.toString()}';
+      debugPrint('Error fetching organization: $_error');
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+  
+  // Fetch organization by ID
+  Future<void> fetchOrganizationById(String organizationId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Get organization by ID
+      final organization = await OrganizationService.instance.getOrganizationById(organizationId);
+      
+      if (organization != null) {
+        // Get additional organization data
+        final carbonFootprint = await OrganizationService.instance.getOrganizationCarbonFootprint(organization.id);
+        final sustainabilityMetrics = await OrganizationService.instance.getOrganizationSustainabilityMetrics(organization.id);
+        final teamMembers = await OrganizationService.instance.getOrganizationTeamMembers(organization.id);
+        final activities = await OrganizationService.instance.getOrganizationActivities(organization.id);
+        final sdgFocusAreas = await OrganizationService.instance.getOrganizationSdgFocusAreas(organization.id);
+        
+        // Create complete organization with all data
+        _selectedOrganization = organization.copyWith(
+          carbonFootprint: carbonFootprint,
+          sustainabilityMetrics: sustainabilityMetrics,
+          teamMembers: teamMembers,
+          activities: activities,
+          sdgFocusAreas: sdgFocusAreas,
+        );
+        
+        debugPrint('Organization fetched successfully: ${_selectedOrganization?.name}');
+      } else {
+        _error = 'Organization not found';
+      }
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('Error fetching organization: $_error');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  // Refresh organization data
+  Future<void> refreshOrganization() async {
+    fetchCurrentUserOrganization();
+  }
+  
+  // Create mock organization data for fallback/development
+  Organization _createMockOrganization() {
+    return Organization(
+      id: 'mock-1',
+      name: 'EcoTech Solutions',
+      description: 'A leading sustainable technology company focused on developing innovative solutions for environmental challenges.',
+      logoUrl: 'https://placehold.co/400x400?text=EcoTech',
+      website: 'https://ecotechsolutions.example.com',
+      location: 'San Francisco, CA',
+      foundedYear: 2010,
+      sustainabilityMetrics: [
+        SustainabilityMetric(
+          name: 'Renewable Energy Usage',
+          value: 85,
+          target: 100,
+          unit: '%',
+          description: 'Percentage of energy from renewable sources',
+        ),
+        SustainabilityMetric(
+          name: 'Waste Reduction',
+          value: 45,
+          target: 75,
+          unit: '%',
+          description: 'Reduction in waste compared to baseline year',
+        ),
+        SustainabilityMetric(
+          name: 'Water Conservation',
+          value: 60,
+          target: 80,
+          unit: '%',
+          description: 'Reduction in water usage compared to baseline year',
+        ),
+      ],
+      carbonFootprint: CarbonFootprint(
+        totalEmissions: 1250,
+        unit: 'tCO2e',
+        year: 2023,
+        reductionGoal: 30,
+        reductionTarget: 875,
+        categories: [
+          EmissionCategory(
+            name: 'Energy',
+            value: 500,
+            subcategories: [
+              EmissionSubcategory(
+                name: 'Electricity',
+                value: 350,
+              ),
+              EmissionSubcategory(
+                name: 'Heating',
+                value: 150,
+              ),
+            ],
+          ),
+          EmissionCategory(
+            name: 'Transportation',
+            value: 450,
+            subcategories: [
+              // Car with various fuel types
+              EmissionSubcategory(
+                name: 'Car',
+                value: 80,
+                fuelType: 'Petrol',
+              ),
+              EmissionSubcategory(
+                name: 'Car',
+                value: 60,
+                fuelType: 'Diesel',
+              ),
+              EmissionSubcategory(
+                name: 'Car',
+                value: 30,
+                fuelType: 'Electric',
+              ),
+              EmissionSubcategory(
+                name: 'Car',
+                value: 40,
+                fuelType: 'Hybrid',
+              ),
+              EmissionSubcategory(
+                name: 'Car',
+                value: 20,
+                fuelType: 'Natural Gas',
+              ),
+              EmissionSubcategory(
+                name: 'Car',
+                value: 15,
+                fuelType: 'Biofuel',
+              ),
+              
+              // Motorcycle
+              EmissionSubcategory(
+                name: 'Motorcycle',
+                value: 30,
+                fuelType: 'Petrol',
+              ),
+              EmissionSubcategory(
+                name: 'Motorcycle',
+                value: 15,
+                fuelType: 'Electric',
+              ),
+              
+              // Bus
+              EmissionSubcategory(
+                name: 'Bus',
+                value: 35,
+                fuelType: 'Diesel',
+              ),
+              EmissionSubcategory(
+                name: 'Bus',
+                value: 20,
+                fuelType: 'Natural Gas',
+              ),
+              EmissionSubcategory(
+                name: 'Bus',
+                value: 15,
+                fuelType: 'Electric',
+              ),
+              EmissionSubcategory(
+                name: 'Bus',
+                value: 25,
+                fuelType: 'Hybrid',
+              ),
+              
+              // Train
+              EmissionSubcategory(
+                name: 'Train',
+                value: 30,
+                fuelType: 'Diesel',
+              ),
+              EmissionSubcategory(
+                name: 'Train',
+                value: 40,
+                fuelType: 'Electric',
+              ),
+              
+              // Plane
+              EmissionSubcategory(
+                name: 'Plane',
+                value: 40,
+                fuelType: 'Jet Fuel',
+              ),
+              EmissionSubcategory(
+                name: 'Plane',
+                value: 10,
+                fuelType: 'Sustainable Aviation Fuel',
+              ),
+            ],
+          ),
+          EmissionCategory(
+            name: 'Waste',
+            value: 150,
+            subcategories: [
+              EmissionSubcategory(
+                name: 'Landfill',
+                value: 100,
+              ),
+              EmissionSubcategory(
+                name: 'Recycling',
+                value: 50,
+              ),
+            ],
+          ),
+          EmissionCategory(
+            name: 'Supply Chain',
+            value: 150,
+            subcategories: [
+              EmissionSubcategory(
+                name: 'Raw Materials',
+                value: 90,
+              ),
+              EmissionSubcategory(
+                name: 'Manufacturing',
+                value: 60,
+              ),
+            ],
+          ),
+        ],
+      ),
+      teamMembers: [
+        TeamMember(
+          name: 'Sarah Johnson',
+          role: 'CEO',
+          photoUrl: 'https://placehold.co/200x200?text=SJ',
+          email: 'sarah@ecotechsolutions.example.com',
+        ),
+        TeamMember(
+          name: 'Michael Chen',
+          role: 'CTO',
+          photoUrl: 'https://placehold.co/200x200?text=MC',
+          email: 'michael@ecotechsolutions.example.com',
+        ),
+        TeamMember(
+          name: 'Aisha Patel',
+          role: 'Sustainability Director',
+          photoUrl: 'https://placehold.co/200x200?text=AP',
+          email: 'aisha@ecotechsolutions.example.com',
+        ),
+        TeamMember(
+          name: 'David Rodriguez',
+          role: 'Head of Research',
+          photoUrl: 'https://placehold.co/200x200?text=DR',
+          email: 'david@ecotechsolutions.example.com',
+        ),
+      ],
+      sdgFocusAreas: [
+        'Climate Action',
+        'Affordable and Clean Energy',
+        'Responsible Consumption and Production',
+        'Industry, Innovation and Infrastructure',
+      ],
+      activities: [
+        Activity(
+          title: 'Solar Panel Installation',
+          description: 'Completed installation of solar panels on our main office building, reducing our carbon footprint by 20%.',
+          date: DateTime.now().subtract(const Duration(days: 14)),
+          imageUrl: 'https://placehold.co/600x400?text=Solar+Panels',
+          type: 'Infrastructure',
+        ),
+        Activity(
+          title: 'Beach Cleanup',
+          description: 'Team volunteered for a beach cleanup, collecting over 500 pounds of plastic waste.',
+          date: DateTime.now().subtract(const Duration(days: 30)),
+          imageUrl: 'https://placehold.co/600x400?text=Beach+Cleanup',
+          type: 'Community',
+        ),
+        Activity(
+          title: 'Sustainable Product Launch',
+          description: 'Launched our new eco-friendly product line made from 100% recycled materials.',
+          date: DateTime.now().subtract(const Duration(days: 60)),
+          imageUrl: 'https://placehold.co/600x400?text=Product+Launch',
+          type: 'Product',
+        ),
+      ],
+    );
   }
 }

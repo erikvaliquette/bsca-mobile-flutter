@@ -138,8 +138,8 @@ class CarbonFootprintScreen extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final reductionPercentage = carbonFootprint.reductionAchieved != null
-        ? (carbonFootprint.reductionAchieved! / carbonFootprint.reductionGoal!) * 100
+    final reductionPercentage = carbonFootprint.reductionTarget != null && carbonFootprint.reductionGoal! > 0
+        ? (carbonFootprint.reductionTarget! / carbonFootprint.reductionGoal!) * 100
         : 0.0;
 
     return Card(
@@ -164,13 +164,13 @@ class CarbonFootprintScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Goal: ${carbonFootprint.reductionGoal} ${carbonFootprint.unit}',
+                        'Goal: ${carbonFootprint.reductionGoal}% by ${carbonFootprint.year ?? 'future'}',
                         style: const TextStyle(fontSize: 16),
                       ),
-                      if (carbonFootprint.reductionAchieved != null) ...[
+                      if (carbonFootprint.reductionTarget != null) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Achieved: ${carbonFootprint.reductionAchieved} ${carbonFootprint.unit}',
+                          'Target: ${carbonFootprint.reductionTarget} ${carbonFootprint.unit}',
                           style: const TextStyle(fontSize: 16),
                         ),
                       ],
@@ -226,12 +226,7 @@ class CarbonFootprintScreen extends StatelessWidget {
     return ExpansionTile(
       title: Row(
         children: [
-          Icon(
-            IconData(
-              int.tryParse(category.icon ?? '0xe25c') ?? 0xe25c,
-              fontFamily: 'MaterialIcons',
-            ),
-          ),
+          _getIconForCategory(category.icon),
           const SizedBox(width: 12),
           Text(category.name),
           const Spacer(),
@@ -250,36 +245,7 @@ class CarbonFootprintScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: category.subcategories!
-                  .map((subcategory) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 24),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(subcategory.name),
-                                  if (subcategory.fuelType != null)
-                                    Text(
-                                      'Fuel: ${subcategory.fuelType}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              '${subcategory.value} ${carbonFootprint.unit}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ))
+                  .map((subcategory) => _buildSubcategoryItem(context, subcategory))
                   .toList(),
             ),
           )
@@ -289,6 +255,39 @@ class CarbonFootprintScreen extends StatelessWidget {
             child: Text('No subcategories available'),
           ),
       ],
+    );
+  }
+
+  Widget _buildSubcategoryItem(BuildContext context, EmissionSubcategory subcategory) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        children: [
+          const SizedBox(width: 24),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(subcategory.name),
+                if (subcategory.fuelType != null)
+                  Text(
+                    'Fuel: ${subcategory.fuelType}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            '${subcategory.value} ${carbonFootprint.unit}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -351,10 +350,12 @@ class CarbonFootprintScreen extends StatelessWidget {
     // Find the transportation category if it exists
     EmissionCategory? transportCategory;
     if (carbonFootprint.categories != null) {
-      transportCategory = carbonFootprint.categories!.firstWhere(
-        (category) => category.name.toLowerCase().contains('transport'),
-        orElse: () => EmissionCategory(name: 'Transportation', value: 0),
-      );
+      for (var category in carbonFootprint.categories!) {
+        if (category.name.toLowerCase().contains('transport')) {
+          transportCategory = category;
+          break;
+        }
+      }
     }
     
     if (transportCategory == null || transportCategory.subcategories == null || transportCategory.subcategories!.isEmpty) {
@@ -419,46 +420,90 @@ class CarbonFootprintScreen extends StatelessWidget {
     );
   }
   
-  Widget _getTransportIcon(String transportMode) {
-    IconData iconData;
+  Widget _getIconForCategory(String? iconName) {
+    if (iconName == null) return const Icon(Icons.eco);
     
+    switch (iconName.toLowerCase()) {
+      case 'factory':
+        return const Icon(Icons.factory);
+      case 'electric_bolt':
+        return const Icon(Icons.electric_bolt);
+      case 'commute':
+        return const Icon(Icons.commute);
+      case 'co2':
+        return const Icon(Icons.co2);
+      case 'water_drop':
+        return const Icon(Icons.water_drop);
+      case 'recycling':
+        return const Icon(Icons.recycling);
+      case 'energy':
+        return const Icon(Icons.bolt);
+      case 'agriculture':
+        return const Icon(Icons.agriculture);
+      case 'business':
+        return const Icon(Icons.business);
+      case 'flight':
+        return const Icon(Icons.flight);
+      case 'local_shipping':
+        return const Icon(Icons.local_shipping);
+      default:
+        return const Icon(Icons.eco);
+    }
+  }
+
+  Widget _getTransportIcon(String transportMode) {
     switch (transportMode.toLowerCase()) {
       case 'car':
-        iconData = Icons.directions_car;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.directions_car, color: Colors.black87),
+        );
       case 'motorcycle':
-        iconData = Icons.motorcycle;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.motorcycle, color: Colors.black87),
+        );
       case 'truck':
-        iconData = Icons.local_shipping;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.local_shipping, color: Colors.black87),
+        );
       case 'bus':
-        iconData = Icons.directions_bus;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.directions_bus, color: Colors.black87),
+        );
       case 'train':
-        iconData = Icons.train;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.train, color: Colors.black87),
+        );
       case 'boat':
-        iconData = Icons.directions_boat;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.directions_boat, color: Colors.black87),
+        );
       case 'plane':
-        iconData = Icons.flight;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.flight, color: Colors.black87),
+        );
       case 'bicycle':
-        iconData = Icons.pedal_bike;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.pedal_bike, color: Colors.black87),
+        );
       case 'walking':
-        iconData = Icons.directions_walk;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.directions_walk, color: Colors.black87),
+        );
       default:
-        iconData = Icons.commute;
-        break;
+        return CircleAvatar(
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.commute, color: Colors.black87),
+        );
     }
-    
-    return CircleAvatar(
-      backgroundColor: Colors.grey[200],
-      child: Icon(iconData, color: Colors.black87),
-    );
   }
 
   Color _getFuelTypeColor(String fuelType) {

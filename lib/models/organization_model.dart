@@ -7,11 +7,12 @@ class Organization {
   final String? logoUrl;
   final String? website;
   final String? location;
+  final int? foundedYear;
   final List<SustainabilityMetric>? sustainabilityMetrics;
   final CarbonFootprint? carbonFootprint;
   final List<TeamMember>? teamMembers;
   final List<String>? sdgFocusAreas;
-  final List<OrganizationActivity>? recentActivities;
+  final List<Activity>? activities;
 
   Organization({
     required this.id,
@@ -20,42 +21,59 @@ class Organization {
     this.logoUrl,
     this.website,
     this.location,
+    this.foundedYear,
     this.sustainabilityMetrics,
     this.carbonFootprint,
     this.teamMembers,
     this.sdgFocusAreas,
-    this.recentActivities,
+    this.activities,
   });
+  
+  Organization copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? logoUrl,
+    String? website,
+    String? location,
+    int? foundedYear,
+    List<SustainabilityMetric>? sustainabilityMetrics,
+    CarbonFootprint? carbonFootprint,
+    List<TeamMember>? teamMembers,
+    List<String>? sdgFocusAreas,
+    List<Activity>? activities,
+  }) {
+    return Organization(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      logoUrl: logoUrl ?? this.logoUrl,
+      website: website ?? this.website,
+      location: location ?? this.location,
+      foundedYear: foundedYear ?? this.foundedYear,
+      sustainabilityMetrics: sustainabilityMetrics ?? this.sustainabilityMetrics,
+      carbonFootprint: carbonFootprint ?? this.carbonFootprint,
+      teamMembers: teamMembers ?? this.teamMembers,
+      sdgFocusAreas: sdgFocusAreas ?? this.sdgFocusAreas,
+      activities: activities ?? this.activities,
+    );
+  }
 
   factory Organization.fromJson(Map<String, dynamic> json) {
     return Organization(
-      id: json['id'],
+      id: json['id'].toString(),
       name: json['name'],
       description: json['description'],
       logoUrl: json['logo_url'],
       website: json['website'],
       location: json['location'],
-      sustainabilityMetrics: json['sustainability_metrics'] != null
-          ? (json['sustainability_metrics'] as List)
-              .map((metric) => SustainabilityMetric.fromJson(metric))
-              .toList()
-          : null,
-      carbonFootprint: json['carbon_footprint'] != null
-          ? CarbonFootprint.fromJson(json['carbon_footprint'])
-          : null,
-      teamMembers: json['team_members'] != null
-          ? (json['team_members'] as List)
-              .map((member) => TeamMember.fromJson(member))
-              .toList()
-          : null,
-      sdgFocusAreas: json['sdg_focus_areas'] != null
-          ? List<String>.from(json['sdg_focus_areas'])
-          : null,
-      recentActivities: json['recent_activities'] != null
-          ? (json['recent_activities'] as List)
-              .map((activity) => OrganizationActivity.fromJson(activity))
-              .toList()
-          : null,
+      foundedYear: json['founded_year'],
+      // These fields are fetched separately by the OrganizationService
+      sustainabilityMetrics: null,
+      carbonFootprint: null,
+      teamMembers: null,
+      sdgFocusAreas: null,
+      activities: null,
     );
   }
 
@@ -67,34 +85,39 @@ class Organization {
       'logo_url': logoUrl,
       'website': website,
       'location': location,
-      'sustainability_metrics': sustainabilityMetrics?.map((metric) => metric.toJson()).toList(),
-      'carbon_footprint': carbonFootprint?.toJson(),
-      'team_members': teamMembers?.map((member) => member.toJson()).toList(),
-      'sdg_focus_areas': sdgFocusAreas,
-      'recent_activities': recentActivities?.map((activity) => activity.toJson()).toList(),
+      'founded_year': foundedYear,
+      // These fields are managed separately
+      // 'sustainability_metrics': sustainabilityMetrics?.map((metric) => metric.toJson()).toList(),
+      // 'carbon_footprint': carbonFootprint?.toJson(),
+      // 'team_members': teamMembers?.map((member) => member.toJson()).toList(),
+      // 'sdg_focus_areas': sdgFocusAreas,
+      // 'activities': activities?.map((activity) => activity.toJson()).toList(),
     };
   }
 }
 
 class SustainabilityMetric {
   final String name;
-  final String value;
+  final dynamic value; // Can be double or int
+  final dynamic target; // Optional target value
   final String? unit;
-  final IconData? icon;
+  final String? description;
 
   SustainabilityMetric({
     required this.name,
     required this.value,
+    this.target,
     this.unit,
-    this.icon,
+    this.description,
   });
 
   factory SustainabilityMetric.fromJson(Map<String, dynamic> json) {
     return SustainabilityMetric(
       name: json['name'],
       value: json['value'],
+      target: json['target'],
       unit: json['unit'],
-      icon: json['icon'] != null ? IconData(json['icon'], fontFamily: 'MaterialIcons') : null,
+      description: json['description'],
     );
   }
 
@@ -102,8 +125,9 @@ class SustainabilityMetric {
     return {
       'name': name,
       'value': value,
+      'target': target,
       'unit': unit,
-      'icon': icon?.codePoint,
+      'description': description,
     };
   }
 }
@@ -111,24 +135,37 @@ class SustainabilityMetric {
 class CarbonFootprint {
   final double totalEmissions;
   final String unit;
+  final int? year;
   final double? reductionGoal;
-  final double? reductionAchieved;
+  final double? reductionTarget;
   final List<EmissionCategory>? categories;
 
   CarbonFootprint({
     required this.totalEmissions,
     required this.unit,
+    this.year,
     this.reductionGoal,
-    this.reductionAchieved,
+    this.reductionTarget,
     this.categories,
   });
 
   factory CarbonFootprint.fromJson(Map<String, dynamic> json) {
     return CarbonFootprint(
-      totalEmissions: json['total_emissions'],
+      totalEmissions: json['total_emissions'] is int 
+          ? (json['total_emissions'] as int).toDouble() 
+          : json['total_emissions'],
       unit: json['unit'],
-      reductionGoal: json['reduction_goal'],
-      reductionAchieved: json['reduction_achieved'],
+      year: json['year'],
+      reductionGoal: json['reduction_goal'] != null 
+          ? (json['reduction_goal'] is int 
+              ? (json['reduction_goal'] as int).toDouble() 
+              : json['reduction_goal']) 
+          : null,
+      reductionTarget: json['reduction_target'] != null 
+          ? (json['reduction_target'] is int 
+              ? (json['reduction_target'] as int).toDouble() 
+              : json['reduction_target']) 
+          : null,
       categories: json['categories'] != null
           ? (json['categories'] as List)
               .map((category) => EmissionCategory.fromJson(category))
@@ -141,8 +178,9 @@ class CarbonFootprint {
     return {
       'total_emissions': totalEmissions,
       'unit': unit,
+      'year': year,
       'reduction_goal': reductionGoal,
-      'reduction_achieved': reductionAchieved,
+      'reduction_target': reductionTarget,
       'categories': categories?.map((category) => category.toJson()).toList(),
     };
   }
@@ -213,14 +251,14 @@ class EmissionSubcategory {
 }
 
 class TeamMember {
-  final String id;
+  final String? id;
   final String name;
   final String? role;
   final String? photoUrl;
   final String? email;
 
   TeamMember({
-    required this.id,
+    this.id,
     required this.name,
     this.role,
     this.photoUrl,
@@ -229,7 +267,7 @@ class TeamMember {
 
   factory TeamMember.fromJson(Map<String, dynamic> json) {
     return TeamMember(
-      id: json['id'],
+      id: json['id']?.toString(),
       name: json['name'],
       role: json['role'],
       photoUrl: json['photo_url'],
@@ -248,34 +286,33 @@ class TeamMember {
   }
 }
 
-class OrganizationActivity {
-  final String id;
+class Activity {
+  final String? id;
   final String title;
   final String? description;
   final DateTime date;
   final String? imageUrl;
-  final ActivityType type;
+  final String? type;
 
-  OrganizationActivity({
-    required this.id,
+  Activity({
+    this.id,
     required this.title,
     this.description,
     required this.date,
     this.imageUrl,
-    required this.type,
+    this.type,
   });
 
-  factory OrganizationActivity.fromJson(Map<String, dynamic> json) {
-    return OrganizationActivity(
-      id: json['id'],
+  factory Activity.fromJson(Map<String, dynamic> json) {
+    return Activity(
+      id: json['id']?.toString(),
       title: json['title'],
       description: json['description'],
-      date: DateTime.parse(json['date']),
+      date: json['date'] is String 
+          ? DateTime.parse(json['date']) 
+          : DateTime.fromMillisecondsSinceEpoch(json['date']),
       imageUrl: json['image_url'],
-      type: ActivityType.values.firstWhere(
-        (e) => e.toString().split('.').last == json['type'],
-        orElse: () => ActivityType.other,
-      ),
+      type: json['type'],
     );
   }
 
@@ -286,15 +323,7 @@ class OrganizationActivity {
       'description': description,
       'date': date.toIso8601String(),
       'image_url': imageUrl,
-      'type': type.toString().split('.').last,
+      'type': type,
     };
   }
-}
-
-enum ActivityType {
-  event,
-  initiative,
-  achievement,
-  announcement,
-  other,
 }

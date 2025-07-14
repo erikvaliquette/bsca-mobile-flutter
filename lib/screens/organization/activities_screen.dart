@@ -3,7 +3,7 @@ import 'package:bsca_mobile_flutter/models/organization_model.dart';
 import 'package:intl/intl.dart';
 
 class ActivitiesScreen extends StatelessWidget {
-  final List<OrganizationActivity> activities;
+  final List<Activity> activities;
 
   const ActivitiesScreen({
     super.key,
@@ -13,7 +13,7 @@ class ActivitiesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Sort activities by date, most recent first
-    final sortedActivities = List<OrganizationActivity>.from(activities)
+    final sortedActivities = List<Activity>.from(activities)
       ..sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(
@@ -94,35 +94,50 @@ class ActivitiesScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActivityTypeChip(ActivityType type) {
+  Widget _buildActivityTypeChip(String? type) {
     IconData icon;
     String label;
     Color color;
 
-    switch (type) {
-      case ActivityType.event:
+    switch (type?.toLowerCase()) {
+      case 'event':
         icon = Icons.event;
         label = 'Event';
         color = Colors.blue;
         break;
-      case ActivityType.initiative:
+      case 'initiative':
         icon = Icons.lightbulb;
         label = 'Initiative';
         color = Colors.green;
         break;
-      case ActivityType.achievement:
+      case 'achievement':
         icon = Icons.emoji_events;
         label = 'Achievement';
         color = Colors.amber;
         break;
-      case ActivityType.announcement:
+      case 'announcement':
         icon = Icons.campaign;
         label = 'Announcement';
         color = Colors.purple;
         break;
-      case ActivityType.other:
+      case 'infrastructure':
+        icon = Icons.business;
+        label = 'Infrastructure';
+        color = Colors.teal;
+        break;
+      case 'community':
+        icon = Icons.people;
+        label = 'Community';
+        color = Colors.deepOrange;
+        break;
+      case 'product':
+        icon = Icons.shopping_bag;
+        label = 'Product';
+        color = Colors.indigo;
+        break;
+      default:
         icon = Icons.info;
-        label = 'Other';
+        label = type ?? 'Other';
         color = Colors.grey;
         break;
     }
