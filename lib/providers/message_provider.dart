@@ -328,8 +328,6 @@ class MessageProvider extends ChangeNotifier {
       final messageData = {
         'sender_id': user.id,
         'content': content,
-        'extension': 'text',
-        'topic': topic ?? 'message',
         'read': false,
         'status': 'sent',
       };

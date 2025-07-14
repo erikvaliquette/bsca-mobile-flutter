@@ -100,10 +100,22 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _messageController.clear();
 
     final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    await messageProvider.sendMessage(
+    final sentMessage = await messageProvider.sendMessage(
       roomId: widget.roomId,
       content: text,
     );
+    
+    // Ensure the UI scrolls to show the new message
+    if (sentMessage != null && _scrollController.hasClients) {
+      // Give time for the UI to update
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      });
+    }
   }
 
   @override

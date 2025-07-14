@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:collection';
 
 import '../models/local_trip_data.dart';
 import '../services/supabase/supabase_client.dart';
@@ -19,9 +20,26 @@ class TravelEmissionsService {
   /// Get the Supabase client
   SupabaseClient get _client => SupabaseService.client;
   
+  // Cache for trips by user ID
+  final Map<String, _CachedData<List<TripData>>> _tripCache = {};
+  
+  // Cache for location points by trip ID
+  final Map<String, _CachedData<List<LocationPoint>>> _locationPointCache = {};
+  
+  // Cache expiration time (5 minutes)
+  static const _cacheExpirationMs = 300000; // 5 minutes in milliseconds
+  
   /// Get all travel trips for a user
   Future<List<TripData>> getUserTrips(String userId) async {
     try {
+      // Check cache first
+      if (_tripCache.containsKey(userId) && !_tripCache[userId]!.isExpired) {
+        return _tripCache[userId]!.data;
+      }
+      
+      List<TripData> trips = [];
+      bool isSynced = false;
+      
       // Check if we're online
       if (ConnectivityService.instance.isConnected) {
         try {
@@ -32,25 +50,31 @@ class TravelEmissionsService {
               .eq('user_id', userId)
               .order('start_time', ascending: false);
           
-          final trips = (response as List).map((trip) => TripData.fromJson(trip)).toList();
+          trips = (response as List).map((trip) => TripData.fromJson(trip)).toList();
+          isSynced = true;
           
-          // Save trips to local storage
-          for (final trip in trips) {
-            await LocalStorageService.instance.saveTrip(
+          // Save trips to local storage in batch
+          await Future.wait(
+            trips.map((trip) => LocalStorageService.instance.saveTrip(
               LocalTripData.fromTripData(trip, isSynced: true)
-            );
-          }
-          
-          return trips;
+            ))
+          );
         } catch (e) {
           debugPrint('Error getting user trips from Supabase: $e');
           // Fall back to local storage
         }
       }
       
-      // Get trips from local storage
-      final localTrips = LocalStorageService.instance.getUserTrips(userId);
-      return localTrips.map((localTrip) => localTrip.toTripData()).toList();
+      // If we couldn't get from Supabase, get from local storage
+      if (trips.isEmpty) {
+        final localTrips = LocalStorageService.instance.getUserTrips(userId);
+        trips = localTrips.map((localTrip) => localTrip.toTripData()).toList();
+      }
+      
+      // Update cache
+      _tripCache[userId] = _CachedData<List<TripData>>(trips);
+      
+      return trips;
     } catch (e) {
       debugPrint('Error getting user trips: $e');
       return [];
@@ -62,20 +86,7 @@ class TravelEmissionsService {
     try {
       // Generate a local ID if none provided
       final tripId = trip.id == null || trip.id!.isEmpty ? 'local_${const Uuid().v4()}' : trip.id;
-      final tripWithId = TripData(
-        id: tripId,
-        userId: trip.userId,
-        startTime: trip.startTime,
-        endTime: trip.endTime,
-        distance: trip.distance,
-        mode: trip.mode,
-        fuelType: trip.fuelType,
-        emissions: trip.emissions,
-        startLocation: trip.startLocation,
-        endLocation: trip.endLocation,
-        isActive: trip.isActive,
-        purpose: trip.purpose,
-      );
+      final tripWithId = trip.copyWith(id: tripId);
       
       // Save to local storage first
       final localTrip = LocalTripData.fromTripData(tripWithId, isSynced: false);
@@ -98,6 +109,9 @@ class TravelEmissionsService {
             isSynced: true,
           );
           await LocalStorageService.instance.saveTrip(updatedLocalTrip);
+          
+          // Invalidate user trips cache
+          _invalidateUserTripsCache(trip.userId);
           
           return savedTrip;
         } catch (e) {
@@ -134,6 +148,11 @@ class TravelEmissionsService {
             await LocalStorageService.instance.markTripSynced(tripId);
           }
           
+          // Invalidate caches
+          if (updatedLocalTrip != null) {
+            _invalidateUserTripsCache(updatedLocalTrip.userId);
+          }
+          
           return true;
         } catch (e) {
           debugPrint('Error updating trip in Supabase: $e');
@@ -153,6 +172,9 @@ class TravelEmissionsService {
   /// Delete a trip
   Future<bool> deleteTrip(String tripId) async {
     try {
+      // Get trip data first to know user ID for cache invalidation
+      final trip = await _getTripById(tripId);
+      
       // Delete from local storage first
       final localSuccess = await LocalStorageService.instance.deleteTrip(tripId);
       
@@ -164,6 +186,12 @@ class TravelEmissionsService {
               .delete()
               .eq('id', tripId);
           
+          // Invalidate caches
+          if (trip != null) {
+            _invalidateUserTripsCache(trip.userId);
+          }
+          _locationPointCache.remove(tripId);
+          
           return true;
         } catch (e) {
           debugPrint('Error deleting trip from Supabase: $e');
@@ -171,6 +199,9 @@ class TravelEmissionsService {
           return localSuccess;
         }
       }
+      
+      // Invalidate location points cache
+      _locationPointCache.remove(tripId);
       
       return localSuccess;
     } catch (e) {
@@ -198,6 +229,9 @@ class TravelEmissionsService {
             await LocalStorageService.instance.markLocationPointSynced(savedPoint.id);
           }
           
+          // Invalidate location points cache for this trip
+          _locationPointCache.remove(point.tripId);
+          
           return true;
         } catch (e) {
           debugPrint('Error adding location point to Supabase: $e');
@@ -205,6 +239,9 @@ class TravelEmissionsService {
           SyncService.instance.syncData();
         }
       }
+      
+      // Invalidate location points cache for this trip
+      _locationPointCache.remove(point.tripId);
       
       // Return true if local save was successful
       return savedPoint != null;
@@ -217,6 +254,13 @@ class TravelEmissionsService {
   /// Get all location points for a trip
   Future<List<LocationPoint>> getTripLocationPoints(String tripId) async {
     try {
+      // Check cache first
+      if (_locationPointCache.containsKey(tripId) && !_locationPointCache[tripId]!.isExpired) {
+        return _locationPointCache[tripId]!.data;
+      }
+      
+      List<LocationPoint> points = [];
+      
       // Check if we're online
       if (ConnectivityService.instance.isConnected) {
         try {
@@ -227,25 +271,30 @@ class TravelEmissionsService {
               .eq('trip_id', tripId)
               .order('timestamp');
           
-          final points = (response as List).map((point) => LocationPoint.fromJson(point)).toList();
+          points = (response as List).map((point) => LocationPoint.fromJson(point)).toList();
           
-          // Save points to local storage
-          for (final point in points) {
-            await LocalStorageService.instance.saveLocationPoint(
+          // Save points to local storage in batch
+          await Future.wait(
+            points.map((point) => LocalStorageService.instance.saveLocationPoint(
               LocalLocationPoint.fromLocationPoint(point, isSynced: true)
-            );
-          }
-          
-          return points;
+            ))
+          );
         } catch (e) {
           debugPrint('Error getting trip location points from Supabase: $e');
           // Fall back to local storage
         }
       }
       
-      // Get location points from local storage
-      final localPoints = LocalStorageService.instance.getTripLocationPoints(tripId);
-      return localPoints.map((localPoint) => localPoint.toLocationPoint()).toList();
+      // If we couldn't get from Supabase, get from local storage
+      if (points.isEmpty) {
+        final localPoints = LocalStorageService.instance.getTripLocationPoints(tripId);
+        points = localPoints.map((localPoint) => localPoint.toLocationPoint()).toList();
+      }
+      
+      // Update cache
+      _locationPointCache[tripId] = _CachedData<List<LocationPoint>>(points);
+      
+      return points;
     } catch (e) {
       debugPrint('Error getting trip location points: $e');
       return [];
@@ -322,6 +371,41 @@ class TripData {
       if (purpose != null) 'purpose': purpose,
     };
   }
+  
+  /// Create a copy of this TripData with optional field updates
+  TripData copyWith({
+    String? id,
+    String? userId,
+    DateTime? startTime,
+    DateTime? endTime,
+    double? distance,
+    String? mode,
+    String? fuelType,
+    double? emissions,
+    String? startLocation,
+    String? endLocation,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? purpose,
+  }) {
+    return TripData(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      distance: distance ?? this.distance,
+      mode: mode ?? this.mode,
+      fuelType: fuelType ?? this.fuelType,
+      emissions: emissions ?? this.emissions,
+      startLocation: startLocation ?? this.startLocation,
+      endLocation: endLocation ?? this.endLocation,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      purpose: purpose ?? this.purpose,
+    );
+  }
 }
 
 /// Data model for a location point
@@ -366,5 +450,50 @@ class LocationPoint {
       if (altitude != null) 'altitude': altitude,
       if (speed != null) 'speed': speed,
     };
+  }
+}
+
+/// Helper class for caching data with expiration
+class _CachedData<T> {
+  final T data;
+  final DateTime timestamp;
+  
+  _CachedData(this.data) : timestamp = DateTime.now();
+  
+  bool get isExpired => 
+      DateTime.now().difference(timestamp).inMilliseconds > 
+      TravelEmissionsService._cacheExpirationMs;
+}
+
+extension TravelEmissionsServiceExtension on TravelEmissionsService {
+  /// Helper method to invalidate user trips cache
+  void _invalidateUserTripsCache(String userId) {
+    _tripCache.remove(userId);
+  }
+  
+  /// Helper method to get a trip by ID
+  Future<TripData?> _getTripById(String tripId) async {
+    try {
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          final response = await _client
+              .from('travel_trips')
+              .select()
+              .eq('id', tripId)
+              .single();
+          
+          return TripData.fromJson(response);
+        } catch (e) {
+          debugPrint('Error getting trip by ID from Supabase: $e');
+        }
+      }
+      
+      // Try local storage
+      final localTrip = LocalStorageService.instance.getTrip(tripId);
+      return localTrip?.toTripData();
+    } catch (e) {
+      debugPrint('Error getting trip by ID: $e');
+      return null;
+    }
   }
 }
