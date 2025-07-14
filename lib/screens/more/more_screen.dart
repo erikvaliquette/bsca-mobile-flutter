@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:bsca_mobile_flutter/screens/profile/profile_screen.dart';
+import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -24,7 +25,10 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'Organization',
         icon: Icons.business,
-        onTap: () => _navigateToScreen(context, 'Organization'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const OrganizationScreen()),
+        ),
       ),
       MoreMenuItem(
         title: 'SDG Marketplace',

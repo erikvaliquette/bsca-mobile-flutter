@@ -6,6 +6,7 @@ import 'providers/auth_provider.dart';
 import 'providers/message_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/business_connection_provider.dart';
+import 'providers/organization_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/supabase/supabase_client.dart';
@@ -37,6 +38,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => MessageProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => BusinessConnectionProvider()),
+        ChangeNotifierProvider(create: (_) => OrganizationProvider()),
       ],
       child: const BscaApp(),
     ),
