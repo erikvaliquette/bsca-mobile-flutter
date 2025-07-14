@@ -1,6 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+
+import '../models/local_trip_data.dart';
 import '../services/supabase/supabase_client.dart';
+import 'connectivity_service.dart';
+import 'local_storage_service.dart';
+import 'sync_service.dart';
 
 /// Service for managing travel emissions data
 class TravelEmissionsService {
@@ -16,29 +22,93 @@ class TravelEmissionsService {
   /// Get all travel trips for a user
   Future<List<TripData>> getUserTrips(String userId) async {
     try {
-      final response = await _client
-          .from('travel_trips')
-          .select()
-          .eq('user_id', userId)
-          .order('start_time', ascending: false);
+      // Check if we're online
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          // Try to get trips from Supabase
+          final response = await _client
+              .from('travel_trips')
+              .select()
+              .eq('user_id', userId)
+              .order('start_time', ascending: false);
+          
+          final trips = (response as List).map((trip) => TripData.fromJson(trip)).toList();
+          
+          // Save trips to local storage
+          for (final trip in trips) {
+            await LocalStorageService.instance.saveTrip(
+              LocalTripData.fromTripData(trip, isSynced: true)
+            );
+          }
+          
+          return trips;
+        } catch (e) {
+          debugPrint('Error getting user trips from Supabase: $e');
+          // Fall back to local storage
+        }
+      }
       
-      return (response as List).map((trip) => TripData.fromJson(trip)).toList();
+      // Get trips from local storage
+      final localTrips = LocalStorageService.instance.getUserTrips(userId);
+      return localTrips.map((localTrip) => localTrip.toTripData()).toList();
     } catch (e) {
       debugPrint('Error getting user trips: $e');
-      rethrow;
+      return [];
     }
   }
   
   /// Create a new trip
   Future<TripData?> createTrip(TripData trip) async {
     try {
-      final response = await _client
-          .from('travel_trips')
-          .insert(trip.toJson())
-          .select()
-          .single();
+      // Generate a local ID if none provided
+      final tripId = trip.id == null || trip.id!.isEmpty ? 'local_${const Uuid().v4()}' : trip.id;
+      final tripWithId = TripData(
+        id: tripId,
+        userId: trip.userId,
+        startTime: trip.startTime,
+        endTime: trip.endTime,
+        distance: trip.distance,
+        mode: trip.mode,
+        fuelType: trip.fuelType,
+        emissions: trip.emissions,
+        startLocation: trip.startLocation,
+        endLocation: trip.endLocation,
+        isActive: trip.isActive,
+        purpose: trip.purpose,
+      );
       
-      return TripData.fromJson(response);
+      // Save to local storage first
+      final localTrip = LocalTripData.fromTripData(tripWithId, isSynced: false);
+      await LocalStorageService.instance.saveTrip(localTrip);
+      
+      // If online, try to sync with Supabase
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          final response = await _client
+              .from('travel_trips')
+              .insert(tripWithId.toJson())
+              .select()
+              .single();
+          
+          final savedTrip = TripData.fromJson(response);
+          
+          // Update local storage with server ID
+          final updatedLocalTrip = localTrip.copyWith(
+            id: savedTrip.id,
+            isSynced: true,
+          );
+          await LocalStorageService.instance.saveTrip(updatedLocalTrip);
+          
+          return savedTrip;
+        } catch (e) {
+          debugPrint('Error creating trip in Supabase: $e');
+          // Schedule sync for later
+          SyncService.instance.syncData();
+        }
+      }
+      
+      // Return the local trip data
+      return tripWithId;
     } catch (e) {
       debugPrint('Error creating trip: $e');
       return null;
@@ -48,12 +118,32 @@ class TravelEmissionsService {
   /// Update an existing trip
   Future<bool> updateTrip(String tripId, Map<String, dynamic> updates) async {
     try {
-      await _client
-          .from('travel_trips')
-          .update(updates)
-          .eq('id', tripId);
+      // Update in local storage first
+      final updatedLocalTrip = await LocalStorageService.instance.updateTrip(tripId, updates);
       
-      return true;
+      // If online, try to sync with Supabase
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          await _client
+              .from('travel_trips')
+              .update(updates)
+              .eq('id', tripId);
+          
+          // Mark as synced in local storage
+          if (updatedLocalTrip != null) {
+            await LocalStorageService.instance.markTripSynced(tripId);
+          }
+          
+          return true;
+        } catch (e) {
+          debugPrint('Error updating trip in Supabase: $e');
+          // Schedule sync for later
+          SyncService.instance.syncData();
+        }
+      }
+      
+      // Return true if local update was successful
+      return updatedLocalTrip != null;
     } catch (e) {
       debugPrint('Error updating trip: $e');
       return false;
@@ -63,29 +153,102 @@ class TravelEmissionsService {
   /// Delete a trip
   Future<bool> deleteTrip(String tripId) async {
     try {
-      await _client
-          .from('travel_trips')
-          .delete()
-          .eq('id', tripId);
+      // Delete from local storage first
+      final localSuccess = await LocalStorageService.instance.deleteTrip(tripId);
       
-      return true;
+      // If online, try to delete from Supabase
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          await _client
+              .from('travel_trips')
+              .delete()
+              .eq('id', tripId);
+          
+          return true;
+        } catch (e) {
+          debugPrint('Error deleting trip from Supabase: $e');
+          // Return local result
+          return localSuccess;
+        }
+      }
+      
+      return localSuccess;
     } catch (e) {
       debugPrint('Error deleting trip: $e');
       return false;
     }
   }
   
-  /// Add a location point for a trip
+  /// Add a location point to a trip
   Future<bool> addLocationPoint(LocationPoint point) async {
     try {
-      await _client
-          .from('travel_locations')
-          .insert(point.toJson());
+      // Save to local storage first
+      final localPoint = LocalLocationPoint.fromLocationPoint(point, isSynced: false);
+      final savedPoint = await LocalStorageService.instance.saveLocationPoint(localPoint);
       
-      return true;
+      // If online, try to sync with Supabase
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          await _client
+              .from('location_points')
+              .insert(point.toJson());
+          
+          // Mark as synced in local storage
+          if (savedPoint != null) {
+            await LocalStorageService.instance.markLocationPointSynced(savedPoint.id);
+          }
+          
+          return true;
+        } catch (e) {
+          debugPrint('Error adding location point to Supabase: $e');
+          // Schedule sync for later
+          SyncService.instance.syncData();
+        }
+      }
+      
+      // Return true if local save was successful
+      return savedPoint != null;
     } catch (e) {
       debugPrint('Error adding location point: $e');
       return false;
+    }
+  }
+  
+  /// Get all location points for a trip
+  Future<List<LocationPoint>> getTripLocationPoints(String tripId) async {
+    try {
+      // Check if we're online
+      if (ConnectivityService.instance.isConnected) {
+        try {
+          // Try to get location points from Supabase
+          final response = await _client
+              .from('location_points')
+              .select()
+              .eq('trip_id', tripId)
+              .order('timestamp');
+          
+          final points = (response as List).map((point) => LocationPoint.fromJson(point)).toList();
+          
+          // Save points to local storage
+          for (final point in points) {
+            await LocalStorageService.instance.saveLocationPoint(
+              LocalLocationPoint.fromLocationPoint(point, isSynced: true)
+            );
+          }
+          
+          return points;
+        } catch (e) {
+          debugPrint('Error getting trip location points from Supabase: $e');
+          // Fall back to local storage
+        }
+      }
+      
+      // Get location points from local storage
+      final localPoints = LocalStorageService.instance.getTripLocationPoints(tripId);
+      return localPoints.map((localPoint) => localPoint.toLocationPoint()).toList();
+    } catch (e) {
+      debugPrint('Error getting trip location points: $e');
+      return [];
     }
   }
 }
@@ -98,6 +261,7 @@ class TripData {
   final DateTime? endTime;
   final double distance;
   final String mode;
+  final String? fuelType;
   final double emissions;
   final String? startLocation;
   final String? endLocation;
@@ -113,6 +277,7 @@ class TripData {
     this.endTime,
     required this.distance,
     required this.mode,
+    this.fuelType,
     required this.emissions,
     this.startLocation,
     this.endLocation,
@@ -130,6 +295,7 @@ class TripData {
       endTime: json['end_time'] != null ? DateTime.parse(json['end_time']) : null,
       distance: double.parse(json['distance'].toString()),
       mode: json['mode'],
+      fuelType: json['fuel_type'],
       emissions: double.parse(json['emissions'].toString()),
       startLocation: json['start_location'],
       endLocation: json['end_location'],
@@ -148,6 +314,7 @@ class TripData {
       if (endTime != null) 'end_time': endTime!.toIso8601String(),
       'distance': distance,
       'mode': mode,
+      if (fuelType != null) 'fuel_type': fuelType,
       'emissions': emissions,
       if (startLocation != null) 'start_location': startLocation,
       if (endLocation != null) 'end_location': endLocation,

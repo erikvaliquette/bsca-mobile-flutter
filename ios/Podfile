@@ -29,6 +29,10 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  use_modular_headers!
+
+  # Explicitly add Reachability pod with correct name
+  pod 'ReachabilitySwift', '~> 5.0', :modular_headers => true
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
@@ -47,6 +51,14 @@ post_install do |installer|
       
       # Make sure all pods use the same iOS version
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      
+      # Fix module import issues
+      config.build_settings['SWIFT_VERSION'] = '5.0'
+      config.build_settings['DEFINES_MODULE'] = 'YES'
+      
+      # Fix for Reachability module not found
+      config.build_settings['SWIFT_INCLUDE_PATHS'] = '$(PODS_ROOT)/ReachabilitySwift'
+      config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) ${PODS_ROOT}/ReachabilitySwift'
       
       config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= []
       config.build_settings['FRAMEWORK_SEARCH_PATHS'] << "${PODS_ROOT}/../Flutter"

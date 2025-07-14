@@ -1,14 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:permission_handler/permission_handler.dart' show openAppSettings;
-import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../models/fuel_types.dart';
+import '../../services/connectivity_service.dart';
 import '../../services/travel_emissions_service.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../widgets/loading_indicator.dart';
@@ -17,9 +18,10 @@ class TravelEmissionsScreen extends HookWidget {
   const TravelEmissionsScreen({Key? key}) : super(key: key);
   
   // Show dialog to edit a trip
-  void _showEditTripDialog(BuildContext context, TripData trip, ValueNotifier<String> selectedMode, ValueNotifier<String> selectedPurpose) {
+  void _showEditTripDialog(BuildContext context, TripData trip, ValueNotifier<String> selectedMode, ValueNotifier<String?> selectedFuelType, ValueNotifier<String> selectedPurpose) {
     // Set the initial purpose value based on the trip's purpose
     String dialogPurpose = trip.purpose ?? 'Personal';
+    String? dialogFuelType = trip.fuelType;
     
     showDialog(
       context: context,
@@ -123,14 +125,18 @@ class TravelEmissionsScreen extends HookWidget {
                   child: ElevatedButton(
                     onPressed: () async {
                       try {
-                        // Update the ValueNotifier with the dialog value
+                        // Update the ValueNotifier with the dialog values
                         selectedPurpose.value = dialogPurpose;
+                        if (FuelTypes.requiresFuelType(trip.mode)) {
+                          selectedFuelType.value = dialogFuelType;
+                        }
                         
                         // Update trip in database
                         await TravelEmissionsService.instance.updateTrip(
                           trip.id!,
                           {
                             'purpose': dialogPurpose,
+                            if (FuelTypes.requiresFuelType(trip.mode)) 'fuel_type': dialogFuelType,
                           },
                         );
                         
@@ -167,16 +173,19 @@ class TravelEmissionsScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedMode = useState('car');
-    final selectedPurpose = useState('Personal');
+    final isLoading = useState(true);
     final isTracking = useState(false);
-    final isLoading = useState(false);
+    final isConnected = useState(ConnectivityService.instance.isConnected);
     final trips = useState<List<TripData>>([]);
+    final totalEmissions = useState(0.0);
+    final selectedMode = useState('car');
+    final selectedFuelType = useState<String?>(FuelTypes.getDefaultFuelType('car'));
+    final selectedPurpose = useState('commute');
     final currentTrip = useState<TripData?>(null);
     final lastPosition = useState<Position?>(null);
     final positionStream = useState<Stream<Position>?>(null);
     final positionStreamSubscription = useState<StreamSubscription<Position>?>(null);
-    final totalEmissions = useState(0.0);
+    final connectivitySubscription = useState<StreamSubscription<bool>?>(null);
     final showTripDetails = useState(false);
     final selectedTrip = useState<TripData?>(null);
     final editingTrip = useState<TripData?>(null);
@@ -185,7 +194,7 @@ class TravelEmissionsScreen extends HookWidget {
     final user = Supabase.instance.client.auth.currentUser;
     
     // Define travel modes with emission factors (kg CO2e per km)
-    final travelModes = [
+    final List<Map<String, dynamic>> travelModes = [
       {'id': 'car', 'name': 'Car', 'icon': Icons.directions_car, 'emissionFactor': 0.192},
       {'id': 'motorcycle', 'name': 'Motorcycle', 'icon': Icons.motorcycle, 'emissionFactor': 0.113},
       {'id': 'truck', 'name': 'Truck', 'icon': Icons.local_shipping, 'emissionFactor': 0.250},
@@ -196,6 +205,16 @@ class TravelEmissionsScreen extends HookWidget {
       {'id': 'bicycle', 'name': 'Bicycle', 'icon': Icons.directions_bike, 'emissionFactor': 0.0},
       {'id': 'walk', 'name': 'Walking', 'icon': Icons.directions_walk, 'emissionFactor': 0.0},
     ];
+    
+    // Update fuel type when mode changes
+    useEffect(() {
+      if (FuelTypes.requiresFuelType(selectedMode.value)) {
+        selectedFuelType.value = FuelTypes.getDefaultFuelType(selectedMode.value);
+      } else {
+        selectedFuelType.value = null;
+      }
+      return null;
+    }, [selectedMode.value]);
     
     // Calculate total emissions by mode
     final emissionsByMode = useMemoized(() {
@@ -213,28 +232,127 @@ class TravelEmissionsScreen extends HookWidget {
       return result;
     }, [trips.value]);
     
-    // Load user trips
+    // Load user trips on init and set up connectivity listener
     useEffect(() {
-      if (user != null) {
-        loadUserTrips(isLoading, trips, totalEmissions);
-      }
-      return null;
-    }, [user]);
-    
-    // Clean up position stream when widget is disposed
-    useEffect(() {
+      // Initial load of user trips
+      loadUserTrips(isLoading, trips, totalEmissions);
+      
+      // Listen for connectivity changes
+      connectivitySubscription.value = ConnectivityService.instance.connectionStatus.listen((connected) {
+        isConnected.value = connected;
+        
+        // Show snackbar when connectivity changes
+        if (connected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are back online. Syncing data...'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          
+          // Reload trips when coming back online to get any newly synced data
+          loadUserTrips(isLoading, trips, totalEmissions);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are offline. Data will be saved locally.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      });
+      
       return () {
-        positionStreamSubscription.value?.cancel();
+        connectivitySubscription.value?.cancel();
       };
     }, []);
     
-    // Get emission factor for selected mode
-    double getEmissionFactor(String mode) {
-      final modeData = travelModes.firstWhere(
-        (m) => m['id'] == mode,
-        orElse: () => travelModes[0],
+    // Clean up position stream and connectivity subscription when widget is disposed
+    useEffect(() {
+      return () async {
+        await positionStreamSubscription.value?.cancel();
+        await connectivitySubscription.value?.cancel();
+      };
+    }, []);
+    
+    // Update trip with new position
+    void updateTripWithNewPosition(
+      Position position,
+      ValueNotifier<Position?> lastPosition,
+      ValueNotifier<TripData?> currentTrip,
+      ValueNotifier<String> selectedMode,
+      ValueNotifier<String?> selectedFuelType,
+    ) {
+      if (lastPosition.value == null || currentTrip.value == null) return;
+      
+      // Calculate distance between last position and current position
+      final distanceInMeters = Geolocator.distanceBetween(
+        lastPosition.value!.latitude,
+        lastPosition.value!.longitude,
+        position.latitude,
+        position.longitude,
       );
-      return modeData['emissionFactor'] as double;
+      
+      // Convert to kilometers
+      final distanceInKm = distanceInMeters / 1000;
+      
+      // Update trip distance
+      final newDistance = currentTrip.value!.distance + distanceInKm;
+      
+      // Calculate emissions based on mode and distance
+      final emissionFactor = FuelTypes.getEmissionFactor(
+        selectedMode.value,
+        selectedFuelType.value,
+      );
+      final newEmissions = newDistance * emissionFactor;
+      
+      // Update trip in database (works offline with local storage)
+      TravelEmissionsService.instance.updateTrip(
+        currentTrip.value!.id!,
+        {
+          'distance': newDistance,
+          'emissions': newEmissions,
+        },
+      ).catchError((error) {
+        debugPrint('Error updating trip: $error');
+        // Continue tracking even if there's an error updating the trip
+      });
+      
+      // Add location point (works offline with local storage)
+      TravelEmissionsService.instance.addLocationPoint(
+        LocationPoint(
+          tripId: currentTrip.value!.id!,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          timestamp: DateTime.now().toIso8601String(),
+          altitude: position.altitude,
+          speed: position.speed,
+        ),
+      ).catchError((error) {
+        debugPrint('Error adding location point: $error');
+        // Continue tracking even if there's an error saving the location point
+      });
+      
+      // Update current trip
+      currentTrip.value = TripData(
+        id: currentTrip.value!.id,
+        userId: currentTrip.value!.userId,
+        startTime: currentTrip.value!.startTime,
+        endTime: currentTrip.value!.endTime,
+        distance: newDistance,
+        mode: currentTrip.value!.mode,
+        fuelType: currentTrip.value!.fuelType,
+        emissions: newEmissions,
+        isActive: true,
+        purpose: currentTrip.value!.purpose,
+        startLocation: currentTrip.value!.startLocation,
+        endLocation: currentTrip.value!.endLocation,
+      );
+    }
+    
+    // Get emission factor for selected mode and fuel type
+    double getEmissionFactor(String mode, String? fuelType) {
+      return FuelTypes.getEmissionFactor(mode, fuelType);
     }
     
     // Start tracking
@@ -325,7 +443,7 @@ class TravelEmissionsScreen extends HookWidget {
                 TextButton(
                   child: const Text('Open Settings'),
                   onPressed: () {
-                    Geolocator.openAppSettings();
+                    openAppSettings();
                     Navigator.of(context).pop();
                   },
                 ),
@@ -343,24 +461,36 @@ class TravelEmissionsScreen extends HookWidget {
         
         lastPosition.value = position;
         
+        // Check connectivity and show appropriate message
+        final isConnected = ConnectivityService.instance.isConnected;
+        if (!isConnected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are offline. Trip will be saved locally and synced when online.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        
         // Create a new trip
         final newTrip = TripData(
           userId: user.id,
           startTime: DateTime.now(),
           distance: 0.0,
           mode: selectedMode.value,
+          fuelType: selectedFuelType.value,
           emissions: 0.0,
           isActive: true,
           purpose: selectedPurpose.value,
         );
         
-        // Save trip to database
+        // Save trip using our offline-capable service
         final savedTrip = await TravelEmissionsService.instance.createTrip(newTrip);
         
         if (savedTrip != null) {
           currentTrip.value = savedTrip;
           
-          // Add initial location point
+          // Add initial location point - will be saved locally if offline
           await TravelEmissionsService.instance.addLocationPoint(
             LocationPoint(
               tripId: savedTrip.id!,
@@ -370,7 +500,10 @@ class TravelEmissionsScreen extends HookWidget {
               altitude: position.altitude,
               speed: position.speed,
             ),
-          );
+          ).catchError((error) {
+            debugPrint('Error adding initial location point: $error');
+            // Continue tracking even if there's an error saving the location point
+          });
           
           // Start position stream
           positionStream.value = Geolocator.getPositionStream(
@@ -382,7 +515,7 @@ class TravelEmissionsScreen extends HookWidget {
           
           // Listen to position updates
           positionStreamSubscription.value = positionStream.value?.listen((Position position) {
-            updateTripWithNewPosition(position, lastPosition, currentTrip, selectedMode);
+            updateTripWithNewPosition(position, lastPosition, currentTrip, selectedMode, selectedFuelType);
             lastPosition.value = position;
           });
           
@@ -415,16 +548,30 @@ class TravelEmissionsScreen extends HookWidget {
         positionStream.value = null;
         
         if (currentTrip.value != null) {
-          // Update trip in database
+          // Check connectivity and show appropriate message
+          final isConnected = ConnectivityService.instance.isConnected;
+          if (!isConnected) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('You are offline. Trip will be saved locally and synced when online.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          
+          // Update trip in database (works offline with local storage)
           final endTime = DateTime.now();
+          final updates = {
+            'end_time': endTime.toIso8601String(),
+            'distance': currentTrip.value!.distance,
+            'emissions': currentTrip.value!.emissions,
+            'is_active': false,
+            'fuel_type': currentTrip.value!.fuelType,
+          };
+          
           await TravelEmissionsService.instance.updateTrip(
             currentTrip.value!.id!,
-            {
-              'end_time': endTime.toIso8601String(),
-              'distance': currentTrip.value!.distance,
-              'emissions': currentTrip.value!.emissions,
-              'is_active': false,
-            },
+            updates,
           );
           
           // Add trip to list
@@ -435,8 +582,10 @@ class TravelEmissionsScreen extends HookWidget {
             endTime: endTime,
             distance: currentTrip.value!.distance,
             mode: currentTrip.value!.mode,
+            fuelType: currentTrip.value!.fuelType,
             emissions: currentTrip.value!.emissions,
             isActive: false,
+            purpose: currentTrip.value!.purpose,
           );
           
           trips.value = [updatedTrip, ...trips.value];
@@ -464,6 +613,15 @@ class TravelEmissionsScreen extends HookWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Travel Emissions'),
+        actions: [
+          // Connectivity status indicator
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: isConnected.value
+                ? const Icon(Icons.wifi, color: Colors.green)
+                : const Icon(Icons.wifi_off, color: Colors.red),
+          ),
+        ],
       ),
       body: user == null
           ? const Center(child: Text('Please log in to track your travel emissions'))
@@ -720,6 +878,65 @@ class TravelEmissionsScreen extends HookWidget {
                         ),
                         const SizedBox(height: 24),
                         
+                        // Fuel type selection (only show if the selected mode requires fuel type)
+                        if (FuelTypes.requiresFuelType(selectedMode.value)) ...[
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Fuel Type',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            height: 50,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: FuelTypes.getFuelTypesForMode(selectedMode.value).length,
+                              itemBuilder: (context, index) {
+                                final fuelType = FuelTypes.getFuelTypesForMode(selectedMode.value)[index];
+                                final isSelected = selectedFuelType.value == fuelType['id'];
+                                
+                                return GestureDetector(
+                                  onTap: () {
+                                    selectedFuelType.value = fuelType['id'] as String;
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    margin: const EdgeInsets.only(right: 8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Theme.of(context).primaryColor.withOpacity(0.2)
+                                          : Colors.grey[200],
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Theme.of(context).primaryColor
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        fuelType['name'] as String,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                          color: isSelected
+                                              ? Theme.of(context).primaryColor
+                                              : Colors.grey[600],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        
                         // Start/Stop tracking button
                         SizedBox(
                           width: double.infinity,
@@ -813,7 +1030,7 @@ class TravelEmissionsScreen extends HookWidget {
                                         );
                                       } else if (direction == DismissDirection.startToEnd) {
                                         // Edit trip
-                                        _showEditTripDialog(context, trip, selectedMode, selectedPurpose);
+                                        _showEditTripDialog(context, trip, selectedMode, selectedFuelType, selectedPurpose);
                                         return false; // Don't dismiss the item
                                       }
                                       return false;
@@ -865,6 +1082,7 @@ class TravelEmissionsScreen extends HookWidget {
                                               '${trip.endTime != null ? ' to ${DateFormat('HH:mm').format(trip.endTime!)}' : ''}',
                                             ),
                                             Text('Purpose: ${trip.purpose ?? 'Not specified'}'),
+                                            if (trip.fuelType != null) Text('Fuel Type: ${trip.fuelType}'),
                                           ],
                                         ),
                                         trailing: Text(
@@ -876,6 +1094,9 @@ class TravelEmissionsScreen extends HookWidget {
                                         onTap: () {
                                           selectedTrip.value = trip;
                                           showTripDetails.value = true;
+                                        },
+                                        onLongPress: () {
+                                          _showEditTripDialog(context, trip, selectedMode, selectedFuelType, selectedPurpose);
                                         },
                                       ),
                                     ),
@@ -962,6 +1183,11 @@ class TravelEmissionsScreen extends HookWidget {
                             )['icon'] as IconData,
                             label: 'Mode of Travel',
                             value: getTravelModeName(selectedTrip.value!.mode, travelModes),
+                          ),
+                          if (selectedTrip.value!.fuelType != null) TripDetailItem(
+                            icon: Icons.local_gas_station,
+                            label: 'Fuel Type',
+                            value: selectedTrip.value!.fuelType!,
                           ),
                           TripDetailItem(
                             icon: Icons.work,
@@ -1089,9 +1315,14 @@ Future<void> loadUserTrips(
   
   try {
     isLoading.value = true;
+    
+    // Get trips using our offline-capable service
     final userTrips = await TravelEmissionsService.instance.getUserTrips(
       Supabase.instance.client.auth.currentUser!.id,
-    );
+    ).catchError((error) {
+      debugPrint('Error loading trips: $error');
+      return <TripData>[];
+    });
     
     trips.value = userTrips;
     
@@ -1108,82 +1339,7 @@ Future<void> loadUserTrips(
   }
 }
 
-void updateTripWithNewPosition(
-  Position position,
-  ValueNotifier<Position?> lastPosition,
-  ValueNotifier<TripData?> currentTrip,
-  ValueNotifier<String> selectedMode,
-) async {
-  if (lastPosition.value == null || currentTrip.value == null) return;
-  
-  // Calculate distance between last position and current position
-  final distanceInMeters = Geolocator.distanceBetween(
-    lastPosition.value!.latitude,
-    lastPosition.value!.longitude,
-    position.latitude,
-    position.longitude,
-  );
-  
-  // Convert to kilometers
-  final distanceInKm = distanceInMeters / 1000;
-  
-  // Only update if we've moved a meaningful distance (to filter out GPS jitter)
-  if (distanceInKm > 0.005) { // 5 meters
-    final updatedDistance = currentTrip.value!.distance + distanceInKm;
-    final emissionFactor = getEmissionFactor(currentTrip.value!.mode);
-    final updatedEmissions = updatedDistance * emissionFactor;
-    
-    // Update current trip
-    currentTrip.value = TripData(
-      id: currentTrip.value!.id,
-      userId: currentTrip.value!.userId,
-      startTime: currentTrip.value!.startTime,
-      distance: updatedDistance,
-      mode: currentTrip.value!.mode,
-      emissions: updatedEmissions,
-      isActive: true,
-    );
-    
-    // Update trip in database
-    await TravelEmissionsService.instance.updateTrip(
-      currentTrip.value!.id!,
-      {
-        'distance': updatedDistance,
-        'emissions': updatedEmissions,
-      },
-    );
-    
-    // Add location point
-    await TravelEmissionsService.instance.addLocationPoint(
-      LocationPoint(
-        tripId: currentTrip.value!.id!,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        timestamp: DateTime.now().toIso8601String(),
-        altitude: position.altitude,
-        speed: position.speed,
-      ),
-    );
-  }
-}
-
-double getEmissionFactor(String mode) {
-  switch (mode) {
-    case 'car':
-      return 0.192;
-    case 'bus':
-      return 0.105;
-    case 'train':
-      return 0.041;
-    case 'plane':
-      return 0.255;
-    case 'bicycle':
-    case 'walk':
-      return 0.0;
-    default:
-      return 0.192; // Default to car
-  }
-}
+// Using FuelTypes.getEmissionFactor instead of this local function
 
 String getTravelModeName(String mode, List<Map<String, dynamic>> travelModes) {
   final modeData = travelModes.firstWhere(
