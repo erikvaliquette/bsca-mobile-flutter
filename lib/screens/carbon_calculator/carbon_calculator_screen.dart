@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +25,6 @@ class CarbonCalculatorScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     // State variables
-    final currentTab = useState(0);
     final isLoading = useState(false);
     final scope1Emissions = useState(0.0);
     final scope2Emissions = useState(0.0);
@@ -99,21 +99,28 @@ class CarbonCalculatorScreen extends HookWidget {
       transportationController.text,
     ]);
     
+    // Debug print to verify build is being called
+    debugPrint('Building CarbonCalculatorScreen');
+    
     return DefaultTabController(
       length: 3,
+      initialIndex: 0,
       child: Scaffold(
         appBar: AppBar(
           title: Text(isOrganizationMode.value ? 'Organization Carbon Calculator' : 'Carbon Footprint Calculator'),
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            labelColor: Theme.of(context).primaryColor,
+            indicatorColor: Theme.of(context).primaryColor,
+            tabs: const [
               Tab(text: 'Scope 1'),
               Tab(text: 'Scope 2'),
               Tab(text: 'Scope 3'),
             ],
           ),
         ),
-        body: Column(
-          children: [
+        body: SafeArea(
+          child: Column(
+            children: [
             // Organization selector (if not in organization mode)
             if (!isOrganizationMode.value)
               Card(
@@ -288,8 +295,12 @@ class CarbonCalculatorScreen extends HookWidget {
             
             // Tab content
             Expanded(
-              child: TabBarView(
-                children: [
+              child: Container(
+                color: Colors.white,
+                child: TabBarView(
+                  physics: const ClampingScrollPhysics(),
+                  dragStartBehavior: DragStartBehavior.down,
+                  children: [
                   // Scope 1 tab
                   _buildScope1Tab(
                     context,
@@ -320,10 +331,12 @@ class CarbonCalculatorScreen extends HookWidget {
                     fuelEnergyController,
                     transportationController,
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
         bottomNavigationBar: BottomAppBar(
           child: Padding(
@@ -507,6 +520,8 @@ class CarbonCalculatorScreen extends HookWidget {
     TextEditingController dieselController,
     TextEditingController refrigerantsController,
   ) {
+    // Debug print to verify tab is being built
+    debugPrint('Building Scope 1 Tab');
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -585,6 +600,8 @@ class CarbonCalculatorScreen extends HookWidget {
     TextEditingController heatingController,
     TextEditingController coolingController,
   ) {
+    // Debug print to verify tab is being built
+    debugPrint('Building Scope 2 Tab');
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -657,6 +674,8 @@ class CarbonCalculatorScreen extends HookWidget {
     TextEditingController fuelEnergyController,
     TextEditingController transportationController,
   ) {
+    // Debug print to verify tab is being built
+    debugPrint('Building Scope 3 Tab');
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -708,7 +727,7 @@ class CarbonCalculatorScreen extends HookWidget {
           // Purchased Goods and Services
           _buildInputField(
             context,
-            'Purchased Goods and Services ($)',
+            'Purchased Goods and Services (\$)',
             'Enter amount',
             purchasedGoodsController,
             Icons.shopping_cart,
@@ -717,7 +736,7 @@ class CarbonCalculatorScreen extends HookWidget {
           // Capital Goods
           _buildInputField(
             context,
-            'Capital Goods ($)',
+            'Capital Goods (\$)',
             'Enter amount',
             capitalGoodsController,
             Icons.business_center,
