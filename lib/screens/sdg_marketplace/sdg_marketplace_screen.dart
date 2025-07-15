@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bsca_mobile_flutter/services/supabase/supabase_client.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -32,26 +33,131 @@ class SdgProject {
   });
 
   factory SdgProject.fromJson(Map<String, dynamic> json) {
+    // Safe getter for string values
+    String? safeString(dynamic value) {
+      if (value == null) return null;
+      return value.toString();
+    }
+    
+    // Completely rewritten goals parser to handle all possible data types
     List<int> parseGoals(dynamic goalsData) {
+      // If null, return empty list
       if (goalsData == null) return [];
+      
+      // If already a list, convert elements to integers
       if (goalsData is List) {
-        return goalsData.map((e) => e as int).toList();
+        return goalsData
+            .map((e) => e == null ? 0 : int.tryParse(e.toString()) ?? 0)
+            .where((e) => e > 0) // Filter out invalid values
+            .toList();
       }
-      return [];
+      
+      // If it's a string, try to parse it as JSON
+      if (goalsData is String) {
+        try {
+          if (goalsData.trim().startsWith('[')) {
+            final List<dynamic> parsed = jsonDecode(goalsData);
+            return parsed
+                .map((e) => e == null ? 0 : int.tryParse(e.toString()) ?? 0)
+                .where((e) => e > 0)
+                .toList();
+          } else {
+            // Single value as string
+            final int? value = int.tryParse(goalsData);
+            return value != null && value > 0 ? [value] : [];
+          }
+        } catch (_) {
+          return [];
+        }
+      }
+      
+      // For any other type, try to convert to string then parse
+      try {
+        final String stringValue = goalsData.toString();
+        if (stringValue.trim().startsWith('[')) {
+          try {
+            final List<dynamic> parsed = jsonDecode(stringValue);
+            return parsed
+                .map((e) => e == null ? 0 : int.tryParse(e.toString()) ?? 0)
+                .where((e) => e > 0)
+                .toList();
+          } catch (_) {
+            return [];
+          }
+        } else {
+          final int? value = int.tryParse(stringValue);
+          return value != null && value > 0 ? [value] : [];
+        }
+      } catch (_) {
+        return [];
+      }
     }
 
+    // Handle the sdg_goals field with extra care
+    List<int> sdgGoals = [];
+    try {
+      sdgGoals = parseGoals(json['sdg_goals']);
+    } catch (e) {
+      print('Error parsing SDG goals: $e');
+      sdgGoals = [];
+    }
+    
+    // Handle date parsing safely
+    DateTime? parseDate(dynamic dateValue) {
+      if (dateValue == null) return null;
+      try {
+        if (dateValue is String) {
+          return DateTime.parse(dateValue);
+        } else {
+          return DateTime.parse(dateValue.toString());
+        }
+      } catch (e) {
+        print('Error parsing date: $e');
+        return null;
+      }
+    }
+    
+    // Map project ID to the correct image URL if not specified
+    String? getProjectImage(String projectId, String? providedImageUrl) {
+      if (providedImageUrl != null && providedImageUrl.isNotEmpty) {
+        return providedImageUrl;
+      }
+      
+      // Map project ID to specific Supabase image
+      switch(projectId) {
+        case '1':
+          return 'sdg-project-1.jpg';
+        case '2':
+          return 'sdg-project-2.jpg';
+        case '3':
+          return 'sdg-project-3.jpg';
+        default:
+          // For other projects, use a default image based on the ID number if possible
+          try {
+            int idNum = int.parse(projectId);
+            int imageNum = ((idNum - 1) % 3) + 1; // Cycle between 1-3
+            return 'sdg-project-$imageNum.jpg';
+          } catch (_) {
+            return 'sdg-project-1.jpg'; // Default to first image
+          }
+      }
+    }
+    
+    // Get the project ID
+    String projectId = json['id']?.toString() ?? '';
+    
     return SdgProject(
-      id: json['id'] ?? '',
-      title: json['title'] ?? 'Untitled Project',
-      description: json['description'] ?? '',
-      impact: json['impact'],
-      imageUrl: json['image_url'],
-      status: json['status'] ?? 'Planning',
-      location: json['location'],
-      deadline: json['deadline'] != null ? DateTime.parse(json['deadline']) : null,
-      contactEmail: json['contact_email'],
-      sdgGoals: parseGoals(json['sdg_goals']),
-      skillsNeeded: json['skills_needed'],
+      id: projectId,
+      title: json['title']?.toString() ?? 'Untitled Project',
+      description: json['description']?.toString() ?? '',
+      impact: safeString(json['impact']),
+      imageUrl: getProjectImage(projectId, safeString(json['image_url'])),
+      status: json['status']?.toString() ?? 'Planning',
+      location: safeString(json['location']),
+      deadline: parseDate(json['deadline']),
+      contactEmail: safeString(json['contact_email']),
+      sdgGoals: sdgGoals,
+      skillsNeeded: safeString(json['skills_needed']),
     );
   }
 }
@@ -105,20 +211,43 @@ class _SDGMarketplaceScreenState extends State<SDGMarketplaceScreen> {
     });
 
     try {
+      // Get the response from Supabase
       final response = await SupabaseService.client
           .from('sdg_projects')
           .select('*')
           .order('created_at', ascending: false);
+      
+      // Debug the response
+      print('Supabase response type: ${response.runtimeType}');
+      
+      // Handle different response types safely
+      List<SdgProject> projects = [];
+      
+      if (response is List) {
+        // Process each item with careful error handling
+        for (var item in response) {
+          try {
+            if (item is Map<String, dynamic>) {
+              projects.add(SdgProject.fromJson(item));
+            } else {
+              print('Skipping non-map item: $item');
+            }
+          } catch (itemError) {
+            print('Error processing project item: $itemError');
+            // Continue processing other items
+          }
+        }
+      } else {
+        print('Unexpected response format: $response');
+      }
 
-      final List<SdgProject> projects = (response as List)
-          .map((projectJson) => SdgProject.fromJson(projectJson))
-          .toList();
-
+      // Update state with the projects we were able to parse
       setState(() {
         _projects = projects;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error in _fetchProjects: $e');
       setState(() {
         _isLoading = false;
       });
@@ -157,17 +286,45 @@ class _SDGMarketplaceScreenState extends State<SDGMarketplaceScreen> {
 
   String _getImageUrl(String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
-      return 'https://via.placeholder.com/400x200?text=No+Image';
+      // If no image URL is provided, use the first project image from Supabase
+      return 'https://vufeuaoosussspqyskdw.supabase.co/storage/v1/object/public/site_images/sdg-project-1.jpg';
     }
 
     // If the URL is already a full URL, return it
     if (imageUrl.startsWith('http')) {
       return imageUrl;
     }
-
-    // Otherwise, construct the URL to the Supabase storage
-    final storageUrl = SupabaseService.client.storage.from('site_images').getPublicUrl(imageUrl);
-    return storageUrl;
+    
+    // If it's a project number, map to the corresponding image
+    if (imageUrl == '1' || imageUrl == 'project1') {
+      return 'https://vufeuaoosussspqyskdw.supabase.co/storage/v1/object/public/site_images/sdg-project-1.jpg';
+    } else if (imageUrl == '2' || imageUrl == 'project2') {
+      return 'https://vufeuaoosussspqyskdw.supabase.co/storage/v1/object/public/site_images/sdg-project-2.jpg';
+    } else if (imageUrl == '3' || imageUrl == 'project3') {
+      return 'https://vufeuaoosussspqyskdw.supabase.co/storage/v1/object/public/site_images/sdg-project-3.jpg';
+    }
+    
+    // If it's a path without the full URL, construct the URL to the Supabase storage
+    if (imageUrl.startsWith('/')) {
+      // Remove leading slash if present
+      imageUrl = imageUrl.substring(1);
+    }
+    
+    // Handle double slashes in the path
+    String path = imageUrl;
+    if (path.contains('//')) {
+      path = path.replaceAll('//', '/');
+    }
+    
+    try {
+      // Try to get the URL from Supabase storage
+      final storageUrl = SupabaseService.client.storage.from('site_images').getPublicUrl(path);
+      return storageUrl;
+    } catch (e) {
+      print('Error getting image URL: $e');
+      // If there's an error, use the direct URL format
+      return 'https://vufeuaoosussspqyskdw.supabase.co/storage/v1/object/public/site_images/$path';
+    }
   }
 
   @override

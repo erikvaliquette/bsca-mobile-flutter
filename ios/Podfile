@@ -79,6 +79,22 @@ post_install do |installer|
         config.build_settings['DEFINES_MODULE'] = 'YES'
         config.build_settings['SWIFT_INCLUDE_PATHS'] = "${PODS_ROOT}/../Flutter"
       end
+      
+      # Fix deprecation warnings for image_picker_ios
+      if target.name == 'image_picker_ios'
+        # Add build setting to use modern UTType API instead of deprecated kUTType constants
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= []
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'DISABLE_KTTYPE_USE=1'
+        config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -DDISABLE_KTTYPE_USE'
+        
+        # Add our custom Swift extension file to the image_picker_ios target
+        config.build_settings['SWIFT_VERSION'] = '5.0'
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        
+        # Suppress specific deprecation warnings
+        config.build_settings['GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS'] = 'NO'
+        config.build_settings['CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS'] = 'NO'
+      end
     end
   end
 end
