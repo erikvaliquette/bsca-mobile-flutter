@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:bsca_mobile_flutter/screens/profile/profile_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dart';
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
+import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
+import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -34,7 +36,10 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'SDG Marketplace',
         icon: Icons.shopping_cart,
-        onTap: () => _navigateToScreen(context, 'SDG Marketplace'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SDGMarketplaceScreen()),
+        ),
       ),
       MoreMenuItem(
         title: 'Carbon Calculator',
@@ -47,7 +52,10 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'Solutions',
         icon: Icons.lightbulb,
-        onTap: () => _navigateToScreen(context, 'Solutions'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SolutionsScreen()),
+        ),
       ),
     ];
 

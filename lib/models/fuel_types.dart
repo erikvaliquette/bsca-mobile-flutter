@@ -20,6 +20,7 @@ class FuelTypes {
 
   /// Fuel types for truck
   static const List<Map<String, dynamic>> truck = [
+    {'id': 'petrol', 'name': 'Petrol', 'emissionFactor': 0.260},
     {'id': 'diesel', 'name': 'Diesel', 'emissionFactor': 0.250},
     {'id': 'natural_gas', 'name': 'Natural Gas', 'emissionFactor': 0.210},
     {'id': 'electric', 'name': 'Electric', 'emissionFactor': 0.080},
