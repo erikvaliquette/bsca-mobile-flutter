@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:bsca_mobile_flutter/screens/profile/profile_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dart';
+import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -38,7 +39,10 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'Carbon Calculator',
         icon: Icons.calculate,
-        onTap: () => _navigateToScreen(context, 'Carbon Calculator'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CarbonCalculatorScreen()),
+        ),
       ),
       MoreMenuItem(
         title: 'Solutions',

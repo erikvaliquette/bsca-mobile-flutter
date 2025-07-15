@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:bsca_mobile_flutter/screens/organization/carbon_footprint_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/team_members_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/activities_screen.dart';
+import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 import 'package:intl/intl.dart';
 
 class OrganizationProfileScreen extends StatelessWidget {
@@ -282,18 +283,35 @@ class OrganizationProfileScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 if (carbonFootprint != null)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CarbonFootprintScreen(
-                            carbonFootprint: carbonFootprint,
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text('View Details'),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CarbonFootprintScreen(
+                                carbonFootprint: carbonFootprint,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('View Details'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CarbonCalculatorScreen(
+                                organization: organization,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Calculate'),
+                      ),
+                    ],
                   ),
               ],
             ),

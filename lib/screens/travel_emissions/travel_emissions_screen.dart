@@ -19,151 +19,270 @@ class TravelEmissionsScreen extends HookWidget {
   
   // Show dialog to edit a trip
   void _showEditTripDialog(BuildContext context, TripData trip, ValueNotifier<String> selectedMode, ValueNotifier<String?> selectedFuelType, ValueNotifier<String> selectedPurpose) {
-    // Set the initial purpose value based on the trip's purpose
+    // Set the initial values based on the trip's data
     String dialogPurpose = trip.purpose ?? 'Personal';
+    String dialogMode = trip.mode;
     String? dialogFuelType = trip.fuelType;
+    
+    // Define travel modes list for dropdown
+    final List<Map<String, dynamic>> travelModes = [
+      {'id': 'car', 'name': 'Car', 'icon': Icons.directions_car},
+      {'id': 'motorcycle', 'name': 'Motorcycle', 'icon': Icons.motorcycle},
+      {'id': 'truck', 'name': 'Truck', 'icon': Icons.local_shipping},
+      {'id': 'bus', 'name': 'Bus', 'icon': Icons.directions_bus},
+      {'id': 'train', 'name': 'Train', 'icon': Icons.train},
+      {'id': 'boat', 'name': 'Boat', 'icon': Icons.directions_boat},
+      {'id': 'plane', 'name': 'Plane', 'icon': Icons.airplanemode_active},
+      {'id': 'bicycle', 'name': 'Bicycle', 'icon': Icons.directions_bike},
+      {'id': 'walk', 'name': 'Walking', 'icon': Icons.directions_walk},
+    ];
     
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            // Get fuel types for the selected mode
+            final fuelTypes = FuelTypes.getFuelTypesForMode(dialogMode);
+            
+            // If the selected fuel type is not valid for the new mode, reset it to default
+            if (FuelTypes.requiresFuelType(dialogMode) && 
+                (dialogFuelType == null || 
+                !fuelTypes.any((f) => f['id'] == dialogFuelType))) {
+              dialogFuelType = FuelTypes.getDefaultFuelType(dialogMode);
+            }
+            
             return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            'Edit Trip',
-            style: TextStyle(
-              color: Theme.of(context).primaryColor,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Purpose selection
-                const Text(
-                  'Trip Purpose',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text(
+                'Edit Trip',
+                style: TextStyle(
+                  color: Theme.of(context).primaryColor,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 12),
-                Row(
+                textAlign: TextAlign.center,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Theme(
-                        data: Theme.of(context).copyWith(
-                          unselectedWidgetColor: Colors.grey[400],
-                        ),
-                        child: RadioListTile<String>(
-                          title: const Text(
-                            'Personal',
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          value: 'Personal',
-                          groupValue: dialogPurpose,
-                          activeColor: Theme.of(context).primaryColor,
+                    // Mode of travel selection
+                    const Text(
+                      'Mode of Travel',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: dialogMode,
+                          items: travelModes.map((mode) {
+                            return DropdownMenuItem<String>(
+                              value: mode['id'] as String,
+                              child: Row(
+                                children: [
+                                  Icon(mode['icon'] as IconData, color: Theme.of(context).primaryColor),
+                                  const SizedBox(width: 12),
+                                  Text(mode['name'] as String),
+                                ],
+                              ),
+                            );
+                          }).toList(),
                           onChanged: (value) {
                             if (value != null) {
                               setState(() {
-                                dialogPurpose = value;
+                                dialogMode = value;
+                                // Reset fuel type when mode changes
+                                dialogFuelType = FuelTypes.getDefaultFuelType(value);
                               });
                             }
                           },
                         ),
                       ),
                     ),
-                    Expanded(
-                      child: Theme(
-                        data: Theme.of(context).copyWith(
-                          unselectedWidgetColor: Colors.grey[400],
+                    const SizedBox(height: 16),
+                    
+                    // Fuel type selection (if applicable)
+                    if (FuelTypes.requiresFuelType(dialogMode)) ...[  
+                      const Text(
+                        'Fuel Type',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                        child: RadioListTile<String>(
-                          title: const Text(
-                            'Business',
-                            style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: dialogFuelType,
+                            items: fuelTypes.map((fuelType) {
+                              return DropdownMenuItem<String>(
+                                value: fuelType['id'] as String,
+                                child: Text(fuelType['name'] as String),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  dialogFuelType = value;
+                                });
+                              }
+                            },
                           ),
-                          value: 'Business',
-                          groupValue: dialogPurpose,
-                          activeColor: Theme.of(context).primaryColor,
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                dialogPurpose = value;
-                              });
-                            }
-                          },
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    
+                    // Purpose selection
+                    const Text(
+                      'Trip Purpose',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              unselectedWidgetColor: Colors.grey[400],
+                            ),
+                            child: RadioListTile<String>(
+                              title: const Text(
+                                'Personal',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              value: 'Personal',
+                              groupValue: dialogPurpose,
+                              activeColor: Theme.of(context).primaryColor,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    dialogPurpose = value;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              unselectedWidgetColor: Colors.grey[400],
+                            ),
+                            child: RadioListTile<String>(
+                              title: const Text(
+                                'Business',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              value: 'Business',
+                              groupValue: dialogPurpose,
+                              activeColor: Theme.of(context).primaryColor,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    dialogPurpose = value;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.grey[200],
+                        ),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            // Calculate new emissions based on the updated mode and fuel type
+                            final emissionFactor = FuelTypes.getEmissionFactor(dialogMode, dialogFuelType);
+                            final newEmissions = trip.distance * emissionFactor;
+                            
+                            // Update the ValueNotifier with the dialog values
+                            selectedMode.value = dialogMode;
+                            selectedPurpose.value = dialogPurpose;
+                            if (FuelTypes.requiresFuelType(dialogMode)) {
+                              selectedFuelType.value = dialogFuelType;
+                            } else {
+                              selectedFuelType.value = null;
+                            }
+                            
+                            // Update trip in database
+                            await TravelEmissionsService.instance.updateTrip(
+                              trip.id!,
+                              {
+                                'mode': dialogMode,
+                                'purpose': dialogPurpose,
+                                'emissions': newEmissions,
+                                if (FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': dialogFuelType,
+                                if (!FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': null,
+                              },
+                            );
+                            
+                            // Close the dialog
+                            Navigator.of(context).pop();
+                            
+                            // Show success message
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Trip updated successfully')),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error updating trip: $e')),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Theme.of(context).primaryColor,
+                        ),
+                        child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
               ],
-            ),
-          ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          actions: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Colors.grey[200],
-                    ),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      try {
-                        // Update the ValueNotifier with the dialog values
-                        selectedPurpose.value = dialogPurpose;
-                        if (FuelTypes.requiresFuelType(trip.mode)) {
-                          selectedFuelType.value = dialogFuelType;
-                        }
-                        
-                        // Update trip in database
-                        await TravelEmissionsService.instance.updateTrip(
-                          trip.id!,
-                          {
-                            'purpose': dialogPurpose,
-                            if (FuelTypes.requiresFuelType(trip.mode)) 'fuel_type': dialogFuelType,
-                          },
-                        );
-                        
-                        // Close the dialog
-                        Navigator.of(context).pop();
-                        
-                        // Show success message
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Trip updated successfully')),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error updating trip: $e')),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: Theme.of(context).primaryColor,
-                    ),
-                    child: const Text('Save', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ],
             );
           },
         );
