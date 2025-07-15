@@ -99,17 +99,96 @@ class CarbonCalculatorScreen extends HookWidget {
       transportationController.text,
     ]);
     
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isOrganizationMode.value ? 'Organization Carbon Calculator' : 'Carbon Footprint Calculator'),
-      ),
-      body: Column(
-        children: [
-          // Organization selector (if not in organization mode)
-          if (!isOrganizationMode.value)
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(isOrganizationMode.value ? 'Organization Carbon Calculator' : 'Carbon Footprint Calculator'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Scope 1'),
+              Tab(text: 'Scope 2'),
+              Tab(text: 'Scope 3'),
+            ],
+          ),
+        ),
+        body: Column(
+          children: [
+            // Organization selector (if not in organization mode)
+            if (!isOrganizationMode.value)
+              Card(
+                margin: const EdgeInsets.all(16),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Calculate For',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<bool>(
+                              title: const Text('Personal'),
+                              value: false,
+                              groupValue: isOrganizationMode.value,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  isOrganizationMode.value = value;
+                                  selectedOrganization.value = null;
+                                }
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<bool>(
+                              title: const Text('Organization'),
+                              value: true,
+                              groupValue: isOrganizationMode.value,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  isOrganizationMode.value = value;
+                                  // Get the current organization from provider
+                                  final orgProvider = Provider.of<OrganizationProvider>(
+                                    context, 
+                                    listen: false
+                                  );
+                                  if (orgProvider.selectedOrganization != null) {
+                                    selectedOrganization.value = orgProvider.selectedOrganization;
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (isOrganizationMode.value && selectedOrganization.value == null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            'Please select an organization in the Organization tab first',
+                            style: TextStyle(color: Colors.red[700]),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              
+            // Summary card at the top
             Card(
               margin: const EdgeInsets.all(16),
-              elevation: 2,
+              elevation: 4,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -119,7 +198,7 @@ class CarbonCalculatorScreen extends HookWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Calculate For',
+                      'Total Carbon Footprint',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -127,48 +206,79 @@ class CarbonCalculatorScreen extends HookWidget {
                     ),
                     const SizedBox(height: 16),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Expanded(
-                          child: RadioListTile<bool>(
-                            title: const Text('Personal'),
-                            value: false,
-                            groupValue: isOrganizationMode.value,
-                            onChanged: (value) {
-                              if (value != null) {
-                                isOrganizationMode.value = value;
-                                selectedOrganization.value = null;
-                              }
-                            },
-                          ),
+                        _buildEmissionSummary(
+                          context,
+                          'Scope 1',
+                          scope1Emissions.value,
+                          Colors.blue,
                         ),
-                        Expanded(
-                          child: RadioListTile<bool>(
-                            title: const Text('Organization'),
-                            value: true,
-                            groupValue: isOrganizationMode.value,
-                            onChanged: (value) {
-                              if (value != null) {
-                                isOrganizationMode.value = value;
-                                // Get the current organization from provider
-                                final orgProvider = Provider.of<OrganizationProvider>(
-                                  context, 
-                                  listen: false
-                                );
-                                if (orgProvider.selectedOrganization != null) {
-                                  selectedOrganization.value = orgProvider.selectedOrganization;
-                                }
-                              }
-                            },
-                          ),
+                        _buildEmissionSummary(
+                          context,
+                          'Scope 2',
+                          scope2Emissions.value,
+                          Colors.green,
+                        ),
+                        _buildEmissionSummary(
+                          context,
+                          'Scope 3',
+                          scope3Emissions.value,
+                          Colors.orange,
                         ),
                       ],
                     ),
-                    if (isOrganizationMode.value && selectedOrganization.value == null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          'Please select an organization in the Organization tab first',
-                          style: TextStyle(color: Colors.red[700]),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text(
+                        'Total: ${totalEmissions.value.toStringAsFixed(2)} tCO₂e',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (totalEmissions.value > 0)
+                      SizedBox(
+                        height: 180,
+                        child: PieChart(
+                          PieChartData(
+                            sections: [
+                              PieChartSectionData(
+                                value: scope1Emissions.value,
+                                title: 'Scope 1',
+                                color: Colors.blue,
+                                radius: 60,
+                                titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              PieChartSectionData(
+                                value: scope2Emissions.value,
+                                title: 'Scope 2',
+                                color: Colors.green,
+                                radius: 60,
+                                titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              PieChartSectionData(
+                                value: scope3Emissions.value,
+                                title: 'Scope 3',
+                                color: Colors.orange,
+                                radius: 60,
+                                titleStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 40,
+                          ),
                         ),
                       ),
                   ],
@@ -176,264 +286,161 @@ class CarbonCalculatorScreen extends HookWidget {
               ),
             ),
             
-          // Summary card at the top
-          Card(
-            margin: const EdgeInsets.all(16),
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Tab content
+            Expanded(
+              child: TabBarView(
                 children: [
-                  const Text(
-                    'Total Carbon Footprint',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  // Scope 1 tab
+                  _buildScope1Tab(
+                    context,
+                    naturalGasController,
+                    fuelOilController,
+                    propaneController,
+                    dieselController,
+                    refrigerantsController,
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildEmissionSummary(
-                        context,
-                        'Scope 1',
-                        scope1Emissions.value,
-                        Colors.blue,
-                      ),
-                      _buildEmissionSummary(
-                        context,
-                        'Scope 2',
-                        scope2Emissions.value,
-                        Colors.green,
-                      ),
-                      _buildEmissionSummary(
-                        context,
-                        'Scope 3',
-                        scope3Emissions.value,
-                        Colors.orange,
-                      ),
-                    ],
+                  
+                  // Scope 2 tab
+                  _buildScope2Tab(
+                    context,
+                    electricityController,
+                    steamController,
+                    heatingController,
+                    coolingController,
                   ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Text(
-                      'Total: ${totalEmissions.value.toStringAsFixed(2)} tCO₂e',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  
+                  // Scope 3 tab
+                  _buildScope3Tab(
+                    context,
+                    businessTravelController,
+                    employeeCommutingController,
+                    wasteController,
+                    purchasedGoodsController,
+                    capitalGoodsController,
+                    fuelEnergyController,
+                    transportationController,
                   ),
-                  const SizedBox(height: 16),
-                  if (totalEmissions.value > 0)
-                    SizedBox(
-                      height: 180,
-                      child: PieChart(
-                        PieChartData(
-                          sections: [
-                            PieChartSectionData(
-                              value: scope1Emissions.value,
-                              title: 'Scope 1',
-                              color: Colors.blue,
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            PieChartSectionData(
-                              value: scope2Emissions.value,
-                              title: 'Scope 2',
-                              color: Colors.green,
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            PieChartSectionData(
-                              value: scope3Emissions.value,
-                              title: 'Scope 3',
-                              color: Colors.orange,
-                              radius: 60,
-                              titleStyle: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 40,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
-          ),
-          
-          // Tab bar for different scopes
-          TabBar(
-            onTap: (index) => currentTab.value = index,
-            tabs: const [
-              Tab(text: 'Scope 1'),
-              Tab(text: 'Scope 2'),
-              Tab(text: 'Scope 3'),
-            ],
-          ),
-          
-          // Tab content
-          Expanded(
-            child: TabBarView(
+          ],
+        ),
+        bottomNavigationBar: BottomAppBar(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // Scope 1 tab
-                _buildScope1Tab(
-                  context,
-                  naturalGasController,
-                  fuelOilController,
-                  propaneController,
-                  dieselController,
-                  refrigerantsController,
+                // Reset button
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // Reset all form fields
+                    naturalGasController.clear();
+                    fuelOilController.clear();
+                    propaneController.clear();
+                    dieselController.clear();
+                    refrigerantsController.clear();
+                    electricityController.clear();
+                    steamController.clear();
+                    heatingController.clear();
+                    coolingController.clear();
+                    businessTravelController.clear();
+                    employeeCommutingController.clear();
+                    wasteController.clear();
+                    purchasedGoodsController.clear();
+                    capitalGoodsController.clear();
+                    fuelEnergyController.clear();
+                    transportationController.clear();
+                    
+                    // Reset emissions
+                    scope1Emissions.value = 0.0;
+                    scope2Emissions.value = 0.0;
+                    scope3Emissions.value = 0.0;
+                    totalEmissions.value = 0.0;
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reset'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey[300],
+                    foregroundColor: Colors.black87,
+                  ),
                 ),
                 
-                // Scope 2 tab
-                _buildScope2Tab(
-                  context,
-                  electricityController,
-                  steamController,
-                  heatingController,
-                  coolingController,
-                ),
-                
-                // Scope 3 tab
-                _buildScope3Tab(
-                  context,
-                  businessTravelController,
-                  employeeCommutingController,
-                  wasteController,
-                  purchasedGoodsController,
-                  capitalGoodsController,
-                  fuelEnergyController,
-                  transportationController,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: BottomAppBar(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton(
-                onPressed: () {
-                  // Reset all controllers
-                  naturalGasController.clear();
-                  fuelOilController.clear();
-                  propaneController.clear();
-                  dieselController.clear();
-                  refrigerantsController.clear();
-                  electricityController.clear();
-                  steamController.clear();
-                  heatingController.clear();
-                  coolingController.clear();
-                  businessTravelController.clear();
-                  employeeCommutingController.clear();
-                  wasteController.clear();
-                  purchasedGoodsController.clear();
-                  capitalGoodsController.clear();
-                  fuelEnergyController.clear();
-                  transportationController.clear();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[300],
-                ),
-                child: const Text('Reset'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  // Save the calculation
-                  isLoading.value = true;
-                  try {
-                    // Get organization ID if in organization mode
-                    String? organizationId;
-                    if (isOrganizationMode.value && selectedOrganization.value != null) {
-                      organizationId = selectedOrganization.value!.id;
-                    }
-                    
-                    // Save using the service
-                    await CarbonCalculatorService.instance.saveCarbonFootprint(
-                      scope1Emissions: scope1Emissions.value,
-                      scope2Emissions: scope2Emissions.value,
-                      scope3Emissions: scope3Emissions.value,
-                      totalEmissions: totalEmissions.value,
-                      organizationId: organizationId,
-                    );
-                    
-                    // Update organization provider if in organization mode
-                    if (isOrganizationMode.value && selectedOrganization.value != null) {
-                      final orgProvider = Provider.of<OrganizationProvider>(
-                        context, 
-                        listen: false
-                      );
+                // Save button
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    // Save the calculation
+                    isLoading.value = true;
+                    try {
+                      // Get organization ID if in organization mode
+                      String? organizationId;
+                      if (isOrganizationMode.value && selectedOrganization.value != null) {
+                        organizationId = selectedOrganization.value!.id;
+                      }
                       
-                      // Create carbon footprint model
-                      final carbonFootprint = CarbonFootprint(
+                      // Save using the service
+                      await CarbonCalculatorService.instance.saveCarbonFootprint(
+                        scope1Emissions: scope1Emissions.value,
+                        scope2Emissions: scope2Emissions.value,
+                        scope3Emissions: scope3Emissions.value,
                         totalEmissions: totalEmissions.value,
-                        unit: 'tCO₂e',
-                        year: DateTime.now().year,
-                        reductionGoal: 30.0, // Default 30% reduction goal
-                        reductionTarget: totalEmissions.value * 0.7, // 30% reduction
-                        categories: [
-                          EmissionCategory(
-                            name: 'Scope 1: Direct Emissions',
-                            value: scope1Emissions.value,
-                            icon: 'local_fire_department',
-                          ),
-                          EmissionCategory(
-                            name: 'Scope 2: Indirect Emissions',
-                            value: scope2Emissions.value,
-                            icon: 'electric_bolt',
-                          ),
-                          EmissionCategory(
-                            name: 'Scope 3: Value Chain Emissions',
-                            value: scope3Emissions.value,
-                            icon: 'business',
-                          ),
-                        ],
+                        organizationId: organizationId,
                       );
                       
-                      // Update the organization with the new carbon footprint
-                      final updatedOrg = selectedOrganization.value!.copyWith(
-                        carbonFootprint: carbonFootprint,
-                      );
+                      // Update organization provider if in organization mode
+                      if (isOrganizationMode.value && selectedOrganization.value != null) {
+                        final orgProvider = Provider.of<OrganizationProvider>(
+                          context, 
+                          listen: false
+                        );
+                        
+                        // Create carbon footprint model
+                        final carbonFootprint = CarbonFootprint(
+                          totalEmissions: totalEmissions.value,
+                          unit: 'tCO₂e',
+                          year: DateTime.now().year,
+                          reductionGoal: 30.0, // Default 30% reduction goal
+                          reductionTarget: totalEmissions.value * 0.7, // 30% reduction
+                          categories: [
+                            EmissionCategory(
+                              name: 'Scope 1: Direct Emissions',
+                              value: scope1Emissions.value,
+                              icon: 'local_fire_department',
+                            ),
+                            EmissionCategory(
+                              name: 'Scope 2: Indirect Emissions',
+                              value: scope2Emissions.value,
+                              icon: 'electric_bolt',
+                            ),
+                            EmissionCategory(
+                              name: 'Scope 3: Value Chain Emissions',
+                              value: scope3Emissions.value,
+                              icon: 'business',
+                            ),
+                          ],
+                        );
+                        
+                        // Update the organization with the new carbon footprint
+                        final updatedOrg = selectedOrganization.value!.copyWith(
+                          carbonFootprint: carbonFootprint,
+                        );
+                        
+                        // Update the provider
+                        orgProvider.updateOrganization(updatedOrg);
+                      }
                       
-                      // Update the provider
-                      orgProvider.updateOrganization(updatedOrg);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Carbon footprint saved successfully')),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error saving carbon footprint: $e')),
+                      );
+                    } finally {
+                      isLoading.value = false;
                     }
-                    
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Carbon footprint saved successfully')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error saving carbon footprint: $e')),
-                    );
-                  } finally {
-                    isLoading.value = false;
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                ),
-                child: isLoading.value
+                  },
+                  icon: isLoading.value 
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -442,9 +449,15 @@ class CarbonCalculatorScreen extends HookWidget {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('Save'),
-              ),
-            ],
+                    : const Icon(Icons.save),
+                  label: const Text('Save'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -466,12 +479,12 @@ class CarbonCalculatorScreen extends HookWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: color.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             '${value.toStringAsFixed(2)} tCO₂e',
@@ -695,7 +708,7 @@ class CarbonCalculatorScreen extends HookWidget {
           // Purchased Goods and Services
           _buildInputField(
             context,
-            'Purchased Goods and Services (\$)',
+            'Purchased Goods and Services ($)',
             'Enter amount',
             purchasedGoodsController,
             Icons.shopping_cart,
@@ -704,7 +717,7 @@ class CarbonCalculatorScreen extends HookWidget {
           // Capital Goods
           _buildInputField(
             context,
-            'Capital Goods (\$)',
+            'Capital Goods ($)',
             'Enter amount',
             capitalGoodsController,
             Icons.business_center,

@@ -23,6 +23,24 @@ class OrganizationProvider with ChangeNotifier {
     await loadOrganizationDetails(organization.id);
   }
   
+  // Update an organization in the list
+  void updateOrganization(Organization updatedOrganization) {
+    final index = _organizations.indexWhere((org) => org.id == updatedOrganization.id);
+    if (index != -1) {
+      _organizations[index] = updatedOrganization;
+      
+      // Update selected organization if it's the one we just updated
+      if (_selectedOrganization?.id == updatedOrganization.id) {
+        _selectedOrganization = updatedOrganization;
+      }
+      
+      notifyListeners();
+      debugPrint('Organization updated successfully: ${updatedOrganization.name}');
+    } else {
+      debugPrint('Organization not found for update: ${updatedOrganization.id}');
+    }
+  }
+  
   // Load detailed data for an organization
   Future<void> loadOrganizationDetails(String organizationId) async {
     _isLoading = true;
