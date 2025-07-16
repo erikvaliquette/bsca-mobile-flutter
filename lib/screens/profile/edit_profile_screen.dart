@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/image_service.dart';
 import '../../models/profile_model.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -26,7 +27,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _bioController = TextEditingController();
   
   // Image picker
-  final ImagePicker _picker = ImagePicker();
   File? _imageFile;
   String? _avatarUrl;
   
@@ -86,38 +86,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   
   // Image picker method
   Future<void> _pickImage() async {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Photo Library'),
-                onTap: () {
-                  _getImage(ImageSource.gallery);
-                  Navigator.of(context).pop();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Camera'),
-                onTap: () {
-                  _getImage(ImageSource.camera);
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-  
-  Future<void> _getImage(ImageSource source) async {
-    final XFile? pickedFile = await _picker.pickImage(
-      source: source,
+    final File? pickedFile = await ImageService.instance.pickImage(
+      context,
       maxWidth: 800,
       maxHeight: 800,
       imageQuality: 85,
@@ -125,7 +95,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     
     if (pickedFile != null) {
       setState(() {
-        _imageFile = File(pickedFile.path);
+        _imageFile = pickedFile;
       });
     }
   }

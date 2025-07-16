@@ -5,11 +5,11 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/fuel_types.dart';
 import '../../services/connectivity_service.dart';
+import '../../services/location_service.dart';
 import '../../services/travel_emissions_service.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../widgets/loading_indicator.dart';
@@ -486,95 +486,15 @@ class TravelEmissionsScreen extends HookWidget {
       isLoading.value = true;
       
       try {
-        // First check if location services are enabled
-        final locationEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!locationEnabled) {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) => AlertDialog(
-              title: const Text('Location Services Disabled'),
-              content: const Text(
-                'Please enable location services in your device settings to track your travel emissions.'
-              ),
-              actions: [
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                TextButton(
-                  child: const Text('Open Settings'),
-                  onPressed: () {
-                    Geolocator.openLocationSettings();
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            ),
-          );
-          isLoading.value = false;
-          return;
-        }
-        
-        // Check permission status
-        LocationPermission permission = await Geolocator.checkPermission();
-        
-        // Request permission if not granted
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-          
-          if (permission == LocationPermission.denied) {
-            showDialog(
-              context: context,
-              builder: (BuildContext context) => AlertDialog(
-                title: const Text('Location Permission Required'),
-                content: const Text(
-                  'This app needs location access to track your travel emissions. '
-                  'Please grant location permission to use this feature.'
-                ),
-                actions: [
-                  TextButton(
-                    child: const Text('OK'),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            );
-            isLoading.value = false;
-            return;
-          }
-        }
-        
-        // Handle permanently denied permissions
-        if (permission == LocationPermission.deniedForever) {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) => AlertDialog(
-              title: const Text('Location Permission Required'),
-              content: const Text(
-                'Location permissions are permanently denied. '
-                'Please enable location in your device settings to use this feature.'
-              ),
-              actions: [
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                TextButton(
-                  child: const Text('Open Settings'),
-                  onPressed: () {
-                    openAppSettings();
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
-            ),
-          );
+        // Handle location permissions using the LocationService
+        final permissionGranted = await LocationService.instance.handleLocationPermission(context);
+        if (!permissionGranted) {
           isLoading.value = false;
           return;
         }
         
         // Get current position
-        final position = await Geolocator.getCurrentPosition(
+        final position = await LocationService.instance.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
         
@@ -625,7 +545,7 @@ class TravelEmissionsScreen extends HookWidget {
           });
           
           // Start position stream
-          positionStream.value = Geolocator.getPositionStream(
+          positionStream.value = LocationService.instance.getPositionStream(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
               distanceFilter: 10,

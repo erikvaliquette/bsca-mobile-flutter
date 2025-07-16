@@ -58,6 +58,13 @@ post_install do |installer|
       
       # Fix for Reachability module not found
       config.build_settings['SWIFT_INCLUDE_PATHS'] = '$(PODS_ROOT)/ReachabilitySwift'
+      
+      # Suppress specific deprecation warnings for permission_handler_apple
+      if target.name == 'permission_handler_apple'
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+        config.build_settings['OTHER_SWIFT_FLAGS'] ||= '$(inherited)'
+        config.build_settings['OTHER_SWIFT_FLAGS'] += ' -suppress-warnings'
+      end
       config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) ${PODS_ROOT}/ReachabilitySwift'
       
       config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= []
