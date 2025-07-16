@@ -1,10 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart' as permission_handler;
-
-import 'permission_service.dart';
 
 /// A service to handle location-related functionality
 class LocationService {
@@ -65,13 +64,15 @@ class LocationService {
     );
   }
   
-  /// Handle location permission logic
+  /// Handle location permission logic - completely revised to fix permission issues
   Future<bool> handleLocationPermission(BuildContext context) async {
-    // Check if location services are enabled
+    // First check if location services are enabled
     final serviceEnabled = await isLocationServiceEnabled();
     if (!serviceEnabled) {
-      showDialog(
+      // Show dialog to enable location services
+      final bool shouldOpenSettings = await showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (BuildContext context) => AlertDialog(
           title: const Text('Location Services Disabled'),
           content: const Text(
@@ -80,37 +81,70 @@ class LocationService {
           actions: [
             TextButton(
               child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
               child: const Text('Open Settings'),
-              onPressed: () {
-                PermissionService.instance.openSettings();
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
         ),
-      );
+      ) ?? false;
+      
+      if (shouldOpenSettings) {
+        await openLocationSettings();
+      }
       return false;
     }
     
-    // First check if we already have permission using permission_handler
-    final permissionStatus = await permission_handler.Permission.location.status;
-    if (permissionStatus.isGranted || permissionStatus.isLimited) {
-      // We already have permission, no need to request again
-      return true;
+    // Now check for location permission using Geolocator directly
+    // This is more reliable than using permission_handler for location
+    LocationPermission permission = await Geolocator.checkPermission();
+    
+    if (permission == LocationPermission.denied) {
+      // Request permission directly using Geolocator
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        // User denied permission
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied')),
+        );
+        return false;
+      }
     }
     
-    // If we don't have permission, use the PermissionService to handle it
-    final hasPermission = await PermissionService.instance.handlePermission(
-      context,
-      permission_handler.Permission.location,
-      'Location',
-      'This app needs location access to track your travel emissions. '
-      'Please grant location permission to use this feature.',
-    );
+    if (permission == LocationPermission.deniedForever) {
+      // User denied permission forever
+      final bool shouldOpenSettings = await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) => AlertDialog(
+          title: const Text('Location Permission Required'),
+          content: const Text(
+            'Location permission has been permanently denied. '
+            'Please enable it in app settings to track your travel emissions.'
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: const Text('Open Settings'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ) ?? false;
+      
+      if (shouldOpenSettings) {
+        await Geolocator.openAppSettings();
+      }
+      return false;
+    }
     
-    return hasPermission;
+    // Permission is granted or limited - we can proceed
+    return permission == LocationPermission.whileInUse || 
+           permission == LocationPermission.always;
   }
 }

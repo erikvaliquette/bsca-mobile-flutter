@@ -487,16 +487,32 @@ class TravelEmissionsScreen extends HookWidget {
       
       try {
         // Handle location permissions using the LocationService
+        // This will show the necessary dialogs and request permissions if needed
         final permissionGranted = await LocationService.instance.handleLocationPermission(context);
         if (!permissionGranted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission is required to track trips')),
+          );
           isLoading.value = false;
           return;
         }
         
-        // Get current position
-        final position = await LocationService.instance.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
+        // Try to get current position with timeout
+        Position? position;
+        try {
+          position = await LocationService.instance.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+          ).timeout(const Duration(seconds: 15), onTimeout: () {
+            throw TimeoutException('Location request timed out');
+          });
+        } catch (e) {
+          debugPrint('Error getting current position: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to get current location. Please try again.')),
+          );
+          isLoading.value = false;
+          return;
+        }
         
         lastPosition.value = position;
         

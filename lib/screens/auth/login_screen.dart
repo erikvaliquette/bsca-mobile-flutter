@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Logo or app name
                 Center(
                   child: Text(
-                    'BSCA Mobile',
+                    'SDG Network',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).primaryColor,
