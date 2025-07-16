@@ -4,6 +4,7 @@ import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dar
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
+import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -23,7 +24,10 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'Actions',
         icon: Icons.play_arrow,
-        onTap: () => _navigateToScreen(context, 'Actions'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ActionsScreen()),
+        ),
       ),
       MoreMenuItem(
         title: 'Organization',

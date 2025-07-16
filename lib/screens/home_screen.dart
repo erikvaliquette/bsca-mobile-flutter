@@ -79,36 +79,261 @@ class DashboardScreen extends StatelessWidget {
         title: const Text('BSCA Mobile'),
         automaticallyImplyLeading: false,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome Card
+              Card(
+                elevation: 2.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome, ${authProvider.user?.email?.split('@').first ?? 'User'}!',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 8.0),
+                      Text(
+                        'Track your sustainability journey and impact on the environment.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 24.0),
+              
+              // Your Impact Section
+              Card(
+                elevation: 2.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Your Impact',
+                        style: TextStyle(
+                          fontSize: 20.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16.0),
+                      _buildImpactMetrics(),
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 24.0),
+              
+              // Recent Activity Section
+              Card(
+                elevation: 2.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Recent Activity',
+                        style: TextStyle(
+                          fontSize: 20.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16.0),
+                      _buildRecentActivity(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildImpactMetrics() {
+    return Column(
+      children: [
+        Row(
           children: [
-            Text(
-              'Welcome to BSCA Mobile',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'You are signed in as:',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              authProvider.user?.email ?? 'Unknown User',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: _buildMetricCard(
+                'Carbon Reduction',
+                '12.5 tons',
+                Icons.eco,
+                Colors.green,
               ),
             ),
-            const SizedBox(height: 32),
-            const Text(
-              'This is a placeholder dashboard. More features will be added as we migrate from React Native.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey,
+            const SizedBox(width: 16.0),
+            Expanded(
+              child: _buildMetricCard(
+                'Actions Completed',
+                '24',
+                Icons.check_circle,
+                Colors.blue,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 16.0),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMetricCard(
+                'Ongoing Initiatives',
+                '3',
+                Icons.trending_up,
+                Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 16.0),
+            Expanded(
+              child: _buildMetricCard(
+                'Impact Score',
+                '78/100',
+                Icons.star,
+                Colors.amber,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.0),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(height: 8.0),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14.0,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 4.0),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18.0,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildRecentActivity() {
+    final activities = [
+      {
+        'title': 'Completed Travel Log',
+        'description': 'Added a new sustainable travel entry',
+        'time': '2 hours ago',
+        'icon': Icons.flight,
+        'color': Colors.blue,
+      },
+      {
+        'title': 'SDG Progress Update',
+        'description': 'Made progress on SDG 13: Climate Action',
+        'time': '1 day ago',
+        'icon': Icons.trending_up,
+        'color': Colors.green,
+      },
+      {
+        'title': 'New Team Member',
+        'description': 'Sarah joined your organization',
+        'time': '2 days ago',
+        'icon': Icons.person_add,
+        'color': Colors.purple,
+      },
+    ];
+    
+    return Column(
+      children: activities.map((activity) => _buildActivityItem(activity)).toList(),
+    );
+  }
+  
+  Widget _buildActivityItem(Map<String, dynamic> activity) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            decoration: BoxDecoration(
+              color: (activity['color'] as Color).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              activity['icon'] as IconData,
+              color: activity['color'] as Color,
+              size: 20.0,
+            ),
+          ),
+          const SizedBox(width: 12.0),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  activity['title'] as String,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16.0,
+                  ),
+                ),
+                const SizedBox(height: 4.0),
+                Text(
+                  activity['description'] as String,
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    fontSize: 14.0,
+                  ),
+                ),
+                const SizedBox(height: 4.0),
+                Text(
+                  activity['time'] as String,
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
