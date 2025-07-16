@@ -95,7 +95,14 @@ class LocationService {
       return false;
     }
     
-    // Use the PermissionService to handle location permission
+    // First check if we already have permission using permission_handler
+    final permissionStatus = await permission_handler.Permission.location.status;
+    if (permissionStatus.isGranted || permissionStatus.isLimited) {
+      // We already have permission, no need to request again
+      return true;
+    }
+    
+    // If we don't have permission, use the PermissionService to handle it
     final hasPermission = await PermissionService.instance.handlePermission(
       context,
       permission_handler.Permission.location,
@@ -104,19 +111,6 @@ class LocationService {
       'Please grant location permission to use this feature.',
     );
     
-    if (!hasPermission) {
-      return false;
-    }
-    
-    // Also check geolocator's permission as a fallback for compatibility
-    LocationPermission geoPermission = await checkPermission();
-    if (geoPermission == LocationPermission.denied || geoPermission == LocationPermission.deniedForever) {
-      geoPermission = await requestPermission();
-      if (geoPermission == LocationPermission.denied || geoPermission == LocationPermission.deniedForever) {
-        return false;
-      }
-    }
-    
-    return true;
+    return hasPermission;
   }
 }

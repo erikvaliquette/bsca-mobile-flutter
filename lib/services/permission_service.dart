@@ -21,7 +21,8 @@ class PermissionService {
   /// Check if a specific permission is granted
   Future<bool> hasPermission(permission_handler.Permission permission) async {
     final status = await permission.status;
-    return status.isGranted;
+    // Consider both fully granted and limited (e.g., "While Using") as valid permissions
+    return status.isGranted || status.isLimited;
   }
   
   /// Open app settings
@@ -39,8 +40,8 @@ class PermissionService {
     // Check current status
     final status = await permission.status;
     
-    // If already granted, return true
-    if (status.isGranted) {
+    // If already granted or limited (e.g., "While Using"), return true
+    if (status.isGranted || status.isLimited) {
       return true;
     }
     
@@ -55,7 +56,8 @@ class PermissionService {
       
       if (shouldRequest) {
         final result = await permission.request();
-        return result.isGranted;
+        // Accept both granted and limited permissions as valid
+        return result.isGranted || result.isLimited;
       }
       
       return false;
@@ -70,7 +72,7 @@ class PermissionService {
       return false;
     }
     
-    // For other cases (restricted, limited, etc.)
+    // For other cases (restricted, etc.)
     return false;
   }
   
