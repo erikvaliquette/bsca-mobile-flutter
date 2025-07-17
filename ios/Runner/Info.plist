@@ -44,6 +44,7 @@
 	<array>
 		<string>processing</string>
 		<string>location</string>
+		<string>remote-notification</string>
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>

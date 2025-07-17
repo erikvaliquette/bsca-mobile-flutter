@@ -5,6 +5,7 @@ import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_
 import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
 import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
+import 'package:bsca_mobile_flutter/screens/more/notification_test_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -59,6 +60,14 @@ class MoreScreen extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const SolutionsScreen()),
+        ),
+      ),
+      MoreMenuItem(
+        title: 'Notification Test',
+        icon: Icons.notifications,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const NotificationTestScreen()),
         ),
       ),
     ];

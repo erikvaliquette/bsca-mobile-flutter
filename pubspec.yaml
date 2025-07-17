@@ -81,6 +81,10 @@ dependencies:
   connectivity_plus: ^6.1.4
   app_links: ^6.4.0
 
+  # Notifications
+  flutter_local_notifications: ^16.3.0
+  badges: ^3.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/message_provider.dart';
+import '../services/notifications/notification_provider.dart';
+import '../widgets/notification_badge.dart';
 import 'profile/profile_screen.dart';
 import 'messaging/chat_list_screen.dart';
 import 'more/more_screen.dart';
@@ -30,38 +32,60 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+      bottomNavigationBar: Consumer<NotificationProvider>(
+        builder: (context, notificationProvider, _) {
+          return BottomNavigationBar(
+            currentIndex: _currentIndex,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Colors.grey,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+              
+              // Clear notifications when navigating to the respective tab
+              if (index == 1 && notificationProvider.contactRequestCount > 0) {
+                notificationProvider.clearContactRequestNotifications();
+              } else if (index == 3 && notificationProvider.messageCount > 0) {
+                notificationProvider.clearMessageNotifications();
+              } else if (index == 4 && notificationProvider.organizationCount > 0) {
+                notificationProvider.clearOrganizationNotifications();
+              }
+            },
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: NotificationBadge(
+                  type: NotificationType.contactRequest,
+                  child: const Icon(Icons.people),
+                ),
+                label: 'Network',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.flight),
+                label: 'Travel',
+              ),
+              BottomNavigationBarItem(
+                icon: NotificationBadge(
+                  type: NotificationType.message,
+                  child: const Icon(Icons.message),
+                ),
+                label: 'Messages',
+              ),
+              BottomNavigationBarItem(
+                icon: NotificationBadge(
+                  type: NotificationType.organization,
+                  child: const Icon(Icons.more_horiz),
+                ),
+                label: 'More',
+              ),
+            ],
+          );
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Network',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.flight),
-            label: 'Travel',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.message),
-            label: 'Messages',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.more_horiz),
-            label: 'More',
-          ),
-        ],
       ),
     );
   }

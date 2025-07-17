@@ -9,6 +9,7 @@ import 'providers/business_connection_provider.dart';
 import 'providers/organization_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
+import 'services/notifications/notification_provider.dart';
 import 'services/sdg_icon_service.dart';
 import 'services/supabase/supabase_client.dart';
 import 'services/sync_service.dart';
@@ -35,6 +36,10 @@ void main() async {
   // Preload SDG icons for better performance
   await SDGIconService.instance.preloadAllSDGIcons();
   
+  // Initialize notification provider
+  final notificationProvider = NotificationProvider();
+  await notificationProvider.initialize();
+  
   runApp(
     MultiProvider(
       providers: [
@@ -43,6 +48,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => BusinessConnectionProvider()),
         ChangeNotifierProvider(create: (_) => OrganizationProvider()),
+        ChangeNotifierProvider.value(value: notificationProvider),
       ],
       child: const BscaApp(),
     ),
