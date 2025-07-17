@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bsca_mobile_flutter/models/sdg_goal.dart';
 import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
+import 'package:bsca_mobile_flutter/utils/sdg_icons.dart';
+import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
+import 'package:bsca_mobile_flutter/services/sdg_icon_service.dart';
 
 class ActionsScreen extends StatefulWidget {
   const ActionsScreen({super.key});
@@ -173,9 +176,9 @@ class _ActionsScreenState extends State<ActionsScreen> {
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          childAspectRatio: 0.8,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
+          childAspectRatio: 0.75,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
         ),
         itemCount: _userSDGs.length,
         itemBuilder: (context, index) {
@@ -191,41 +194,11 @@ class _ActionsScreenState extends State<ActionsScreen> {
                   _selectedSDG = sdgId;
                 });
               },
-              child: Card(
-                elevation: 2.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                  side: BorderSide(
-                    color: sdg.color,
-                    width: 2.0,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildSDGIcon(sdg.id, 50.0),
-                      const SizedBox(height: 8.0),
-                      Text(
-                        'SDG ${sdg.id}',
-                        style: TextStyle(
-                          color: sdg.color,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4.0),
-                      Text(
-                        sdg.name,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 12.0,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+              child: Center(
+                child: SDGIconWidget(
+                  sdgNumber: sdg.id,
+                  size: 60.0,
+                  showLabel: false,
                 ),
               ),
             );
@@ -359,7 +332,11 @@ class _ActionsScreenState extends State<ActionsScreen> {
             
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-              leading: _buildSDGIcon(sdg.id, 50.0),
+              leading: SDGIconWidget(
+                sdgNumber: sdg.id,
+                size: 50.0,
+                showLabel: false,
+              ),
               title: Text(
                 'SDG ${sdg.id}: ${sdg.name}',
                 style: const TextStyle(
@@ -371,19 +348,23 @@ class _ActionsScreenState extends State<ActionsScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: ElevatedButton(
-                onPressed: () {
-                  print('View button pressed for SDG ${sdg.id}');
-                  setState(() {
-                    _selectedSDG = sdg.id;
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Theme.of(context).primaryColor,
-                  side: BorderSide(color: Theme.of(context).primaryColor),
+              trailing: SizedBox(
+                width: 80, // Fixed width to prevent layout issues
+                child: ElevatedButton(
+                  onPressed: () {
+                    print('View button pressed for SDG ${sdg.id}');
+                    setState(() {
+                      _selectedSDG = sdg.id;
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).primaryColor,
+                    side: BorderSide(color: Theme.of(context).primaryColor),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('View'),
                 ),
-                child: const Text('View'),
               ),
               onTap: () {
                 print('List tile tapped for SDG ${sdg.id}');
@@ -435,16 +416,19 @@ class _ActionsScreenState extends State<ActionsScreen> {
                   });
                 },
                 child: Chip(
-                  avatar: CircleAvatar(
-                    backgroundColor: sdg.color,
-                    child: Text(
-                      '$sdgId',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                  avatar: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: SDGIconWidget(
+                      sdgNumber: sdgId,
+                      size: 24,
+                      showLabel: false,
+                      isCircular: true,
                     ),
                   ),
                   label: Text(sdg.name),
                   backgroundColor: Colors.white,
-                  side: BorderSide(color: sdg.color),
+                  side: BorderSide(color: SDGIcons.getSDGColor(sdgId)),
                 ),
               );
             }).toList(),
@@ -462,12 +446,11 @@ class _ActionsScreenState extends State<ActionsScreen> {
           return Card(
             margin: const EdgeInsets.only(bottom: 8.0),
             child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: sdg.color,
-                child: Text(
-                  '${sdg.id}',
-                  style: const TextStyle(color: Colors.white),
-                ),
+              leading: SDGIconWidget(
+                sdgNumber: sdg.id,
+                size: 40,
+                showLabel: false,
+                isCircular: true,
               ),
               title: Text('SDG ${sdg.id}: ${sdg.name}'),
               subtitle: Text(
@@ -488,29 +471,15 @@ class _ActionsScreenState extends State<ActionsScreen> {
   }
 
   Widget _buildSDGIcon(int sdgId, double size) {
-    final sdg = SDGGoal.getById(sdgId);
     try {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: sdg.color.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(size * 0.1),
-          border: Border.all(color: sdg.color, width: size * 0.04),
-        ),
-        child: Center(
-          child: Text(
-            '$sdgId',
-            style: TextStyle(
-              color: sdg.color,
-              fontWeight: FontWeight.bold,
-              fontSize: size * 0.36,
-            ),
-          ),
-        ),
+      return SDGIconWidget(
+        sdgNumber: sdgId,
+        size: size,
+        showLabel: false,
       );
     } catch (e) {
       print('Error building SDG icon: $e');
+      // Fallback to a simple container with a question mark
       return Container(
         width: size,
         height: size,

@@ -7,6 +7,8 @@ import '../../services/image_service.dart';
 import '../../models/profile_model.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/sdg_icon_widget.dart';
+import '../../utils/sdg_icons.dart';
 import 'edit_work_history_screen.dart';
 import 'edit_education_screen.dart';
 import 'edit_certification_screen.dart';
@@ -320,49 +322,76 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
   
   Widget _buildSdgGoalsSelector() {
-    // List of all SDG goals
-    final allSdgGoals = [
-      'No Poverty',
-      'Zero Hunger',
-      'Good Health and Well-being',
-      'Quality Education',
-      'Gender Equality',
-      'Clean Water and Sanitation',
-      'Affordable and Clean Energy',
-      'Decent Work and Economic Growth',
-      'Industry, Innovation and Infrastructure',
-      'Reduced Inequality',
-      'Sustainable Cities and Communities',
-      'Responsible Consumption and Production',
-      'Climate Action',
-      'Life Below Water',
-      'Life on Land',
-      'Peace, Justice and Strong Institutions',
-      'Partnerships for the Goals',
-    ];
+    // Map SDG numbers to their names
+    final Map<int, String> sdgMap = {
+      1: 'No Poverty',
+      2: 'Zero Hunger',
+      3: 'Good Health and Well-being',
+      4: 'Quality Education',
+      5: 'Gender Equality',
+      6: 'Clean Water and Sanitation',
+      7: 'Affordable and Clean Energy',
+      8: 'Decent Work and Economic Growth',
+      9: 'Industry, Innovation and Infrastructure',
+      10: 'Reduced Inequality',
+      11: 'Sustainable Cities and Communities',
+      12: 'Responsible Consumption and Production',
+      13: 'Climate Action',
+      14: 'Life Below Water',
+      15: 'Life on Land',
+      16: 'Peace, Justice and Strong Institutions',
+      17: 'Partnerships for the Goals',
+    };
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Select the SDG goals that align with your interests:'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: allSdgGoals.map((goal) {
-            final isSelected = _selectedSdgGoals.contains(goal);
-            return FilterChip(
-              label: Text(goal),
-              selected: isSelected,
-              onSelected: (selected) {
+          spacing: 12,
+          runSpacing: 12,
+          children: sdgMap.entries.map((entry) {
+            final int sdgNumber = entry.key;
+            final String goalName = entry.value;
+            final bool isSelected = _selectedSdgGoals.contains(goalName);
+            
+            return GestureDetector(
+              onTap: () {
                 setState(() {
-                  if (selected) {
-                    _selectedSdgGoals.add(goal);
+                  if (isSelected) {
+                    _selectedSdgGoals.remove(goalName);
                   } else {
-                    _selectedSdgGoals.remove(goal);
+                    _selectedSdgGoals.add(goalName);
                   }
                 });
               },
+              child: Stack(
+                children: [
+                  SDGIconWidget(
+                    sdgNumber: sdgNumber,
+                    size: 60.0,
+                    showLabel: false,
+                  ),
+                  if (isSelected)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           }).toList(),
         ),

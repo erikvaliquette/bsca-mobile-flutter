@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:bsca_mobile_flutter/models/solution.dart';
 import 'package:bsca_mobile_flutter/models/sdg_goal.dart';
 import 'package:bsca_mobile_flutter/services/solutions_service.dart';
+import 'package:bsca_mobile_flutter/utils/sdg_icons.dart';
+import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
+import 'package:bsca_mobile_flutter/services/sdg_icon_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SolutionsScreen extends StatefulWidget {
@@ -190,7 +193,7 @@ class _SolutionsScreenState extends State<SolutionsScreen> {
                 
                 // SDG Goals filter
                 SizedBox(
-                  height: 80,
+                  height: 100,
                   child: NotificationListener<OverscrollIndicatorNotification>(
                     onNotification: (OverscrollIndicatorNotification overscroll) {
                       overscroll.disallowIndicator();
@@ -199,59 +202,24 @@ class _SolutionsScreenState extends State<SolutionsScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      itemCount: 5, // Show first 5 SDGs
+                      itemCount: 17, // Show all SDGs
                       // Add semantics for better accessibility
                       addSemanticIndexes: true,
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: false,
                       physics: const ClampingScrollPhysics(),
                       itemBuilder: (context, index) {
-                        final goal = SDGGoal.allGoals[index];
-                        final isSelected = _selectedSDGGoals.contains(goal.id);
+                        final sdgNumber = index + 1; // SDG numbers start from 1
+                        final isSelected = _selectedSDGGoals.contains(sdgNumber);
                         return Padding(
                           padding: const EdgeInsets.only(right: 12.0),
-                          child: GestureDetector(
-                            onTap: () => _toggleSDGGoal(goal.id),
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    border: isSelected
-                                        ? Border.all(
-                                            color: Theme.of(context).colorScheme.primary,
-                                            width: 3.0,
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(4.0),
-                                  ),
-                                  child: Container(
-                                    color: goal.color,
-                                    child: Center(
-                                      child: Text(
-                                        '${goal.id}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${goal.id}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          child: SDGIconWidget(
+                            sdgNumber: sdgNumber,
+                            isSelected: isSelected,
+                            onTap: () => _toggleSDGGoal(sdgNumber),
+                            size: 60,
+                            showLabel: true,
+                            showFullName: false,
                           ),
                         );
                       },
@@ -419,26 +387,11 @@ class _SolutionsScreenState extends State<SolutionsScreen> {
                     itemBuilder: (context, index) {
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
-                        child: Image.asset(
-                          sdgGoals[index].iconPath,
-                          width: 40,
-                          height: 40,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 40,
-                              height: 40,
-                              color: sdgGoals[index].color,
-                              child: Center(
-                                child: Text(
-                                  '${sdgGoals[index].id}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+                        child: SDGIconWidget(
+                          sdgNumber: sdgGoals[index].id,
+                          size: 40,
+                          showLabel: false,
+                          onTap: () => _toggleSDGGoal(sdgGoals[index].id),
                         ),
                       );
                     },

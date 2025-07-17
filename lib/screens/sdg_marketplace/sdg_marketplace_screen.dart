@@ -4,6 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bsca_mobile_flutter/services/supabase/supabase_client.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_project_detail_screen.dart';
+import 'package:bsca_mobile_flutter/utils/sdg_icons.dart';
+import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
+import 'package:bsca_mobile_flutter/services/sdg_icon_service.dart';
 
 class SdgProject {
   final String id;
@@ -404,50 +407,40 @@ class _SDGMarketplaceScreenState extends State<SDGMarketplaceScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: List.generate(17, (index) {
-                      final goalNumber = index + 1;
-                      final goalInfo = _sdgGoalsMap[goalNumber]!;
-                      final isSelected = _selectedGoals.contains(goalNumber);
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              if (isSelected) {
-                                _selectedGoals.remove(goalNumber);
-                              } else {
-                                _selectedGoals.add(goalNumber);
-                              }
-                            });
-                          },
-                          child: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: goalInfo['color'],
-                              borderRadius: BorderRadius.circular(8),
-                              border: isSelected 
-                                ? Border.all(color: Colors.white, width: 3)
-                                : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                '$goalNumber',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
+                SizedBox(
+                  height: 70,
+                  child: NotificationListener<OverscrollIndicatorNotification>(
+                    onNotification: (OverscrollIndicatorNotification overscroll) {
+                      overscroll.disallowIndicator();
+                      return true;
+                    },
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 17, // All SDGs
+                      itemBuilder: (context, index) {
+                        final sdgNumber = index + 1; // SDG numbers start from 1
+                        final isSelected = _selectedGoals.contains(sdgNumber);
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: SDGIconWidget(
+                            sdgNumber: sdgNumber,
+                            isSelected: isSelected,
+                            onTap: () {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedGoals.remove(sdgNumber);
+                                } else {
+                                  _selectedGoals.add(sdgNumber);
+                                }
+                              });
+                            },
+                            size: 50,
+                            showLabel: false,
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -551,25 +544,14 @@ class ProjectCard extends StatelessWidget {
                 left: 8,
                 child: Row(
                   children: project.sdgGoals.take(3).map((goalId) {
-                    final goalInfo = sdgGoalsMap[goalId];
-                    if (goalInfo == null) return const SizedBox.shrink();
-                    
-                    return Container(
-                      width: 36,
-                      height: 36,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: goalInfo['color'],
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$goalId',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: SDGIconWidget(
+                        sdgNumber: goalId,
+                        size: 36,
+                        showLabel: false,
+                        isCircular: true,
+                        onTap: null, // No action needed in card overlay
                       ),
                     );
                   }).toList(),

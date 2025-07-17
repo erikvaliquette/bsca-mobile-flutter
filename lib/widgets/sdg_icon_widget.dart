@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/sdg_icons.dart';
+import '../services/sdg_icon_service.dart';
 
 /// A reusable widget for displaying SDG (Sustainable Development Goals) icons
 class SDGIconWidget extends StatelessWidget {
@@ -23,6 +24,9 @@ class SDGIconWidget extends StatelessWidget {
   
   /// Whether to show the full SDG name instead of just "SDG X"
   final bool showFullName;
+  
+  /// Whether to display the icon in a circular shape
+  final bool isCircular;
 
   const SDGIconWidget({
     Key? key,
@@ -33,78 +37,18 @@ class SDGIconWidget extends StatelessWidget {
     this.showLabel = true,
     this.useAssetIcon = false,
     this.showFullName = false,
+    this.isCircular = false,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final Color color = SDGIcons.getSDGColor(sdgNumber);
-    
+    // Simply return the icon image without any container, border or label
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 8.0),
-        padding: const EdgeInsets.all(4.0),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(8.0),
-          border: Border.all(
-            color: color,
-            width: 2.0,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Icon - using Supabase URL, with fallbacks to assets or IconData
-            Image.network(
-              SDGIcons.getSDGIconUrl(sdgNumber),
-              width: size,
-              height: size,
-              errorBuilder: (context, error, stackTrace) {
-                // First fallback: try local asset
-                if (useAssetIcon) {
-                  return Image.asset(
-                    SDGIcons.getSDGIconPath(sdgNumber),
-                    width: size,
-                    height: size,
-                    errorBuilder: (context, error, stackTrace) {
-                      // Second fallback: use IconData
-                      return Icon(
-                        SDGIcons.getSDGIconData(sdgNumber),
-                        color: isSelected ? Colors.white : color,
-                        size: size,
-                      );
-                    },
-                  );
-                } else {
-                  // Direct fallback to IconData
-                  return Icon(
-                    SDGIcons.getSDGIconData(sdgNumber),
-                    color: isSelected ? Colors.white : color,
-                    size: size,
-                  );
-                }
-              },
-            ),
-            
-            // Optional label
-            if (showLabel)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  showFullName ? SDGIcons.getSDGName(sdgNumber) : 'SDG $sdgNumber',
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : color,
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: showFullName ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-        ),
+      child: SDGIconService.instance.getSDGIconWidget(
+        sdgNumber: sdgNumber,
+        size: size,
+        color: isSelected ? Colors.white : null,
       ),
     );
   }

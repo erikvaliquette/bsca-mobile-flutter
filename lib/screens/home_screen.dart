@@ -76,7 +76,7 @@ class DashboardScreen extends StatelessWidget {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BSCA Mobile'),
+        title: const Text('SDG Network'),
         automaticallyImplyLeading: false,
       ),
       body: SingleChildScrollView(

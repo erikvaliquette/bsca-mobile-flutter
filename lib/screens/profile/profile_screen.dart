@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../models/profile_model.dart';
+import '../../utils/sdg_icons.dart';
+import '../../widgets/sdg_icon_widget.dart';
+import '../../services/sdg_icon_service.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -172,12 +175,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: profile!.sdgGoals!.map((goal) => Chip(
-                              label: Text(goal),
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                            )).toList(),
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: profile!.sdgGoals!.map((goal) {
+                              // Extract SDG number from the goal name
+                              final sdgNumber = _extractSDGNumber(goal);
+                              if (sdgNumber != null) {
+                                return SDGIconWidget(
+                                  sdgNumber: sdgNumber,
+                                  size: 60,
+                                  showLabel: false,
+                                  onTap: () {}, // No action needed in profile view
+                                );
+                              } else {
+                                // Fallback for goals that don't match SDG pattern
+                                return Chip(
+                                  label: Text(goal),
+                                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                );
+                              }
+                            }).toList(),
                           ),
                         ],
                       ),
@@ -529,10 +546,53 @@ Widget _buildDefaultSettingsSection(BuildContext context, Map<String, dynamic> p
 }
 
 String _formatPreferenceKey(String key) {
-  // Convert camelCase to Title Case with spaces
-  final result = key.replaceAllMapped(
-    RegExp(r'([A-Z])'),
-    (match) => ' ${match.group(0)}',
-  );
-  return result[0].toUpperCase() + result.substring(1);
+  // Convert snake_case to Title Case
+  return key
+      .split('_')
+      .map((word) => word.isNotEmpty
+          ? word[0].toUpperCase() + word.substring(1).toLowerCase()
+          : '')
+      .join(' ');
+}
+
+/// Extract SDG number from goal name
+/// Examples: "SDG 1: No Poverty" -> 1, "Climate Action" -> 13
+int? _extractSDGNumber(String goal) {
+  // Check if the goal starts with "SDG" followed by a number
+  final sdgPattern = RegExp(r'SDG\s*(\d+)');
+  final match = sdgPattern.firstMatch(goal);
+  
+  if (match != null && match.groupCount >= 1) {
+    return int.tryParse(match.group(1)!);
+  }
+  
+  // If not in SDG format, try to match by goal name
+  final goalNameMap = {
+    'No Poverty': 1,
+    'Zero Hunger': 2,
+    'Good Health and Well-being': 3,
+    'Quality Education': 4,
+    'Gender Equality': 5,
+    'Clean Water and Sanitation': 6,
+    'Affordable and Clean Energy': 7,
+    'Decent Work and Economic Growth': 8,
+    'Industry, Innovation and Infrastructure': 9,
+    'Reduced Inequalities': 10,
+    'Sustainable Cities and Communities': 11,
+    'Responsible Consumption and Production': 12,
+    'Climate Action': 13,
+    'Life Below Water': 14,
+    'Life on Land': 15,
+    'Peace, Justice and Strong Institutions': 16,
+    'Partnerships for the Goals': 17,
+  };
+  
+  // Check for exact matches or if the goal contains the name
+  for (final entry in goalNameMap.entries) {
+    if (goal == entry.key || goal.contains(entry.key)) {
+      return entry.value;
+    }
+  }
+  
+  return null;
 }

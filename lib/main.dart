@@ -9,6 +9,7 @@ import 'providers/business_connection_provider.dart';
 import 'providers/organization_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
+import 'services/sdg_icon_service.dart';
 import 'services/supabase/supabase_client.dart';
 import 'services/sync_service.dart';
 
@@ -30,6 +31,9 @@ void main() async {
   
   // Initialize sync service
   await SyncService.instance.init();
+  
+  // Preload SDG icons for better performance
+  await SDGIconService.instance.preloadAllSDGIcons();
   
   runApp(
     MultiProvider(
