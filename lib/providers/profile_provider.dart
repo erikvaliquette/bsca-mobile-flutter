@@ -64,30 +64,43 @@ class ProfileProvider extends ChangeNotifier {
           .select()
           .eq('user_id', user.id);
       
-      // Fetch user settings
-      // Try to fetch user settings, but handle potential schema differences
+      // Fetch user settings from the new table structure
       Map<String, dynamic>? settingsResponse;
       try {
-        // First try with user_id
         settingsResponse = await Supabase.instance.client
             .from('user_settings')
             .select()
-            .eq('user_id', user.id)
+            .eq('id', user.id)
             .maybeSingle();
-      } catch (e) {
-        debugPrint('Error fetching settings with user_id: $e');
-        try {
-          // Then try with id
-          settingsResponse = await Supabase.instance.client
-              .from('user_settings')
-              .select()
-              .eq('id', user.id)
-              .maybeSingle();
-        } catch (e) {
-          debugPrint('Error fetching settings with id: $e');
-          // If both fail, settings will remain null
-          settingsResponse = null;
+        
+        if (settingsResponse != null) {
+          debugPrint('Successfully fetched user settings');
+          
+          // Map settings to preferences in the profile model
+          Map<String, dynamic> preferences = {};
+          
+          // Map notification settings
+          preferences['email_notifications'] = settingsResponse['email_notifications'] ?? false;
+          preferences['push_notifications'] = settingsResponse['push_notifications'] ?? false;
+          preferences['public_profile'] = settingsResponse['public_profile'] ?? true;
+          preferences['language'] = settingsResponse['language'] ?? 'en';
+          
+          // Map energy settings
+          preferences['electricity_grid'] = settingsResponse['electricity_grid'] ?? 'global';
+          preferences['home_electricity_grid'] = settingsResponse['home_electricity_grid'] ?? 'global';
+          preferences['business_electricity_grid'] = settingsResponse['business_electricity_grid'] ?? 'global';
+          preferences['electricity_source'] = settingsResponse['electricity_source'] ?? 'grid_mix';
+          
+          // Map transportation settings
+          preferences['transportation'] = settingsResponse['transportation_mode'] ?? 'car';
+          preferences['fuel_type'] = settingsResponse['fuel_type'] ?? 'petrol';
+          
+          completeProfileData['preferences'] = preferences;
         }
+      } catch (e) {
+        debugPrint('Error fetching settings: $e');
+        // If it fails, settings will remain null
+        settingsResponse = null;
       }
       
       // Process SDG goals
@@ -100,6 +113,10 @@ class ProfileProvider extends ChangeNotifier {
           return _mapSdgIdToName(sdgId);
         }).toList();
         completeProfileData['sdg_goals'] = sdgGoals;
+        
+        // Debug SDG goals
+        debugPrint('SDG goals fetched: $sdgGoals');
+        debugPrint('Raw SDG response: $sdgResponse');
       }
       
       // Process work history
@@ -209,10 +226,10 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
   
-  // Update the full user profile including all additional fields
+  /// Updates the full user profile with all provided information
   Future<void> updateFullProfile({
-    String? username,
-    String? fullName,
+    String? username, 
+    String? fullName, 
     String? avatarUrl,
     String? bio,
     List<String>? sdgGoals,
@@ -242,37 +259,60 @@ class ProfileProvider extends ChangeNotifier {
       }
       
       // Begin a transaction for all updates
-      // Update basic profile information
+      // Update basic profile information - only include fields that exist in the table
       final Map<String, dynamic> profileUpdateData = {
-        'username': username ?? _profile!.username,
-        'full_name': fullName ?? _profile!.fullName,
         'avatar_url': avatarUrl ?? _profile!.avatarUrl,
         'bio': bio ?? _profile!.bio,
         'updated_at': DateTime.now().toIso8601String(),
       };
       
       // Update the basic profile in Supabase
-      await Supabase.instance.client
-          .from('profiles')
-          .update(profileUpdateData)
-          .eq('id', user.id);
+      try {
+        await Supabase.instance.client
+            .from('profiles')
+            .update(profileUpdateData)
+            .eq('id', user.id);
+        debugPrint('Updated basic profile information successfully');
+      } catch (e) {
+        debugPrint('Error updating basic profile information: $e');
+        // Continue with other updates even if this fails
+      }
       
       // Update SDG goals if provided
       if (sdgGoals != null) {
-        // First delete existing SDG goals
-        await Supabase.instance.client
-            .from('user_sdgs')
-            .delete()
-            .eq('user_id', user.id);
-        
-        // Then insert new SDG goals
-        for (String sdgId in sdgGoals) {
-          await Supabase.instance.client
+        try {
+          debugPrint('Starting SDG goals update for user ${user.id}');
+          debugPrint('SDG goals to save: $sdgGoals');
+          
+          // First delete existing SDG goals
+          final deleteResponse = await Supabase.instance.client
               .from('user_sdgs')
-              .insert({
-                'user_id': user.id,
-                'sdg_id': sdgId,
-              });
+              .delete()
+              .eq('user_id', user.id);
+          debugPrint('Deleted existing SDG goals');
+          
+          // Then insert new SDG goals
+          for (String goalName in sdgGoals) {
+            // Convert goal name to SDG ID
+            final sdgId = _mapSdgNameToId(goalName);
+            if (sdgId != null) {
+              try {
+                final insertResponse = await Supabase.instance.client
+                    .from('user_sdgs')
+                    .insert({
+                      'user_id': user.id,
+                      'sdg_id': int.parse(sdgId), // Convert to integer as sdg_id is int4
+                    });
+                debugPrint('Inserted SDG: $goalName with ID: $sdgId');
+              } catch (e) {
+                debugPrint('Error inserting SDG $goalName with ID $sdgId: $e');
+              }
+            } else {
+              debugPrint('Could not map SDG name to ID: $goalName');
+            }
+          }
+        } catch (e) {
+          debugPrint('Error updating SDG goals: $e');
         }
       }
       
@@ -335,42 +375,63 @@ class ProfileProvider extends ChangeNotifier {
       
       // Update user settings if preferences are provided
       if (preferences != null) {
-        // Extract settings-specific preferences
-        final Map<String, dynamic> settingsData = {
-          'user_id': user.id,
-          'email_notifications': preferences['email_notifications'] ?? false,
-          'push_notifications': preferences['push_notifications'] ?? false,
-          'public_profile': preferences['public_profile'] ?? true,
-          'language': preferences['language'] ?? 'en',
-          'electricity_grid': preferences['electricity_grid'] ?? 'National Average',
-          'electricity_source': preferences['electricity_source'] ?? 'Grid Mix (Default)',
-          'transportation': preferences['transportation'] ?? 'Car',
-          'fuel_type': preferences['fuel_type'] ?? 'Petrol',
-        };
-        
-        // Check if settings exist and update or insert accordingly
-        final existingSettings = await Supabase.instance.client
-            .from('user_settings')
-            .select()
-            .eq('user_id', user.id)
-            .maybeSingle();
-        
-        if (existingSettings != null) {
-          await Supabase.instance.client
+        try {
+          // Extract settings-specific preferences for the new table structure
+          final Map<String, dynamic> settingsData = {
+            'id': user.id,
+            
+            // Notification settings
+            'email_notifications': preferences['email_notifications'] ?? false,
+            'push_notifications': preferences['push_notifications'] ?? false,
+            'public_profile': preferences['public_profile'] ?? true,
+            'language': preferences['language'] ?? 'en',
+            
+            // Energy settings
+            'electricity_grid': preferences['electricity_grid'] ?? 'global',
+            'home_electricity_grid': preferences['home_electricity_grid'] ?? 'global',
+            'business_electricity_grid': preferences['business_electricity_grid'] ?? 'global',
+            'electricity_source': preferences['electricity_source'] ?? 'grid_mix',
+            
+            // Transportation settings
+            'transportation_mode': preferences['transportation'] ?? 'car',
+            'fuel_type': preferences['fuel_type'] ?? 'petrol',
+            
+            // Update timestamp
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+          
+          // Check if settings exist and update or insert accordingly
+          final existingSettings = await Supabase.instance.client
               .from('user_settings')
-              .update(settingsData)
-              .eq('user_id', user.id);
-        } else {
+              .select()
+              .eq('id', user.id)
+              .maybeSingle();
+          
+          if (existingSettings != null) {
+            await Supabase.instance.client
+                .from('user_settings')
+                .update(settingsData)
+                .eq('id', user.id);
+            debugPrint('Updated user settings successfully');
+          } else {
+            // Add created_at for new records
+            settingsData['created_at'] = DateTime.now().toIso8601String();
+            
+            await Supabase.instance.client
+                .from('user_settings')
+                .insert(settingsData);
+            debugPrint('Inserted new user settings successfully');
+          }
+          
+          // Also update the preferences in the profiles table for backward compatibility
           await Supabase.instance.client
-              .from('user_settings')
-              .insert(settingsData);
+              .from('profiles')
+              .update({'preferences': preferences})
+              .eq('id', user.id);
+        } catch (e) {
+          debugPrint('Error updating user settings: $e');
+          // Continue with the rest of the profile update even if settings update fails
         }
-        
-        // Also update the preferences in the profiles table
-        await Supabase.instance.client
-            .from('profiles')
-            .update({'preferences': preferences})
-            .eq('id', user.id);
       }
       
       // Refresh the profile to get the updated data
@@ -411,5 +472,39 @@ class ProfileProvider extends ChangeNotifier {
     
     // Return the mapped name or the ID if not found
     return sdgMap[sdgId] ?? 'SDG $sdgId';
+  }
+  
+  // Helper method to map SDG name to ID
+  String? _mapSdgNameToId(String sdgName) {
+    // Map of SDG names to IDs
+    final Map<String, String> sdgNameToIdMap = {
+      'No Poverty': '1',
+      'Zero Hunger': '2',
+      'Good Health and Well-being': '3',
+      'Quality Education': '4',
+      'Gender Equality': '5',
+      'Clean Water and Sanitation': '6',
+      'Affordable and Clean Energy': '7',
+      'Decent Work and Economic Growth': '8',
+      'Industry, Innovation and Infrastructure': '9',
+      'Reduced Inequality': '10',
+      'Sustainable Cities and Communities': '11',
+      'Responsible Consumption and Production': '12',
+      'Climate Action': '13',
+      'Life Below Water': '14',
+      'Life on Land': '15',
+      'Peace, Justice and Strong Institutions': '16',
+      'Partnerships for the Goals': '17',
+    };
+    
+    // Try to extract SDG number if the name contains it (e.g., "SDG 1: No Poverty")
+    final RegExp sdgRegex = RegExp(r'SDG (\d+)');
+    final match = sdgRegex.firstMatch(sdgName);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1);
+    }
+    
+    // Otherwise, look up the name in the map
+    return sdgNameToIdMap[sdgName];
   }
 }

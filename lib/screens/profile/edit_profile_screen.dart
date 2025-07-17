@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/image_service.dart';
-import '../../models/profile_model.dart';
 import '../../providers/profile_provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../models/profile_model.dart';
 import '../../widgets/sdg_icon_widget.dart';
-import '../../utils/sdg_icons.dart';
+import '../../services/image_service.dart';
+import 'selection_dialogs.dart';
 import 'edit_work_history_screen.dart';
 import 'edit_education_screen.dart';
 import 'edit_certification_screen.dart';
@@ -122,7 +120,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         
         try {
           // Upload to Supabase Storage
-          final response = await Supabase.instance.client.storage
+          await Supabase.instance.client.storage
               .from('avatars')
               .upload('avatars/$fileName', _imageFile!);
           
@@ -139,10 +137,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
       
-      // Update profile
+      // Update profile - removed username and fullName fields
       await profileProvider.updateFullProfile(
-        username: _usernameController.text,
-        fullName: _fullNameController.text,
         avatarUrl: newAvatarUrl,
         bio: _bioController.text,
         sdgGoals: _selectedSdgGoals,
@@ -242,28 +238,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   // Basic Info Section
                   _buildSectionTitle(context, 'Basic Information'),
                   TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      hintText: 'Enter your username',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a username';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _fullNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      hintText: 'Enter your full name',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
                     controller: _bioController,
                     decoration: const InputDecoration(
                       labelText: 'Bio',
@@ -347,6 +321,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Select the SDG goals that align with your interests:'),
+        const SizedBox(height: 8),
+        Text(
+          'These goals will be saved to your user profile in the database.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 12,
@@ -361,8 +340,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 setState(() {
                   if (isSelected) {
                     _selectedSdgGoals.remove(goalName);
+                    debugPrint('Removed SDG goal: $goalName');
                   } else {
                     _selectedSdgGoals.add(goalName);
+                    debugPrint('Added SDG goal: $goalName');
                   }
                 });
               },
@@ -394,6 +375,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
             );
           }).toList(),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Selected goals: ${_selectedSdgGoals.length}',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -651,14 +637,87 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
   
+  // Helper method to get human-readable values for settings
+  String _getDisplayValue(String key, String? code) {
+    if (code == null) return '';
+    
+    final Map<String, Map<String, String>> displayMappings = {
+      'language': {
+        'en': 'English',
+        'fr': 'French',
+        'es': 'Spanish',
+        'de': 'German',
+        'zh': 'Chinese',
+        'ja': 'Japanese',
+      },
+      'electricity_grid': {
+        'global': 'Global Average',
+        'north_america': 'North America',
+        'europe': 'Europe',
+        'asia': 'Asia',
+        'africa': 'Africa',
+        'oceania': 'Oceania',
+      },
+      'home_electricity_grid': {
+        'global': 'Global Average',
+        'north_america': 'North America',
+        'europe': 'Europe',
+        'asia': 'Asia',
+        'africa': 'Africa',
+        'oceania': 'Oceania',
+      },
+      'business_electricity_grid': {
+        'global': 'Global Average',
+        'north_america': 'North America',
+        'europe': 'Europe',
+        'asia': 'Asia',
+        'africa': 'Africa',
+        'oceania': 'Oceania',
+      },
+      'electricity_source': {
+        'grid_mix': 'Grid Mix (Default)',
+        'coal': 'Coal',
+        'natural_gas': 'Natural Gas',
+        'nuclear': 'Nuclear',
+        'hydro': 'Hydroelectric',
+        'solar': 'Solar',
+        'wind': 'Wind',
+      },
+      'transportation': {
+        'car': 'Car',
+        'bus': 'Bus',
+        'train': 'Train',
+        'bicycle': 'Bicycle',
+        'walk': 'Walk',
+        'motorcycle': 'Motorcycle',
+      },
+      'fuel_type': {
+        'petrol': 'Petrol/Gasoline',
+        'diesel': 'Diesel',
+        'electric': 'Electric',
+        'hybrid': 'Hybrid',
+        'hydrogen': 'Hydrogen',
+        'natural_gas': 'Natural Gas',
+      },
+    };
+    
+    if (displayMappings.containsKey(key) && displayMappings[key]!.containsKey(code)) {
+      return displayMappings[key]![code]!;
+    }
+    
+    return code; // Return the code if no mapping exists
+  }
+
   Widget _buildDefaultSettings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Notification Settings
+        _buildSectionTitle(context, 'Notification Settings'),
         SwitchListTile(
           title: const Text('Email Notifications'),
           subtitle: const Text('Receive email notifications about updates'),
-          value: _preferences['email_notifications'] ?? true,
+          value: _preferences['email_notifications'] ?? false,
           onChanged: (value) {
             setState(() {
               _preferences['email_notifications'] = value;
@@ -668,7 +727,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         SwitchListTile(
           title: const Text('Push Notifications'),
           subtitle: const Text('Receive push notifications on your device'),
-          value: _preferences['push_notifications'] ?? true,
+          value: _preferences['push_notifications'] ?? false,
           onChanged: (value) {
             setState(() {
               _preferences['push_notifications'] = value;
@@ -678,61 +737,111 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         SwitchListTile(
           title: const Text('Public Profile'),
           subtitle: const Text('Make your profile visible to other users'),
-          value: _preferences['public_profile'] ?? false,
+          value: _preferences['public_profile'] ?? true,
           onChanged: (value) {
             setState(() {
               _preferences['public_profile'] = value;
             });
           },
         ),
+        
+        // Language Settings
+        _buildSectionTitle(context, 'Language Settings'),
         ListTile(
           title: const Text('Language'),
-          subtitle: Text(_preferences['language'] ?? 'English'),
+          subtitle: Text(_getDisplayValue('language', _preferences['language'] ?? 'en')),
           trailing: const Icon(Icons.arrow_forward_ios),
           onTap: () {
-            // Show language selection dialog
-            _showLanguageSelectionDialog();
+            SelectionDialogs.showLanguageSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        
+        // Energy Settings
+        _buildSectionTitle(context, 'Energy Settings'),
+        ListTile(
+          title: const Text('Electricity Grid'),
+          subtitle: Text(_getDisplayValue('electricity_grid', _preferences['electricity_grid'] ?? 'global')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showElectricityGridSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        ListTile(
+          title: const Text('Home Electricity Grid'),
+          subtitle: Text(_getDisplayValue('home_electricity_grid', _preferences['home_electricity_grid'] ?? 'global')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showHomeElectricityGridSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        ListTile(
+          title: const Text('Business Electricity Grid'),
+          subtitle: Text(_getDisplayValue('business_electricity_grid', _preferences['business_electricity_grid'] ?? 'global')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showBusinessElectricityGridSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        ListTile(
+          title: const Text('Electricity Source'),
+          subtitle: Text(_getDisplayValue('electricity_source', _preferences['electricity_source'] ?? 'grid_mix')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showElectricitySourceSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        
+        // Transportation Settings
+        _buildSectionTitle(context, 'Transportation Settings'),
+        ListTile(
+          title: const Text('Transportation Mode'),
+          subtitle: Text(_getDisplayValue('transportation', _preferences['transportation'] ?? 'car')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showTransportationModeSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
+          },
+        ),
+        ListTile(
+          title: const Text('Fuel Type'),
+          subtitle: Text(_getDisplayValue('fuel_type', _preferences['fuel_type'] ?? 'petrol')),
+          trailing: const Icon(Icons.arrow_forward_ios),
+          onTap: () {
+            SelectionDialogs.showFuelTypeSelectionDialog(
+              context, 
+              _preferences, 
+              setState
+            );
           },
         ),
       ],
     );
   }
   
-  void _showLanguageSelectionDialog() {
-    final languages = ['English', 'French', 'Spanish', 'German', 'Chinese', 'Japanese'];
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Language'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: languages.map((language) {
-              return ListTile(
-                title: Text(language),
-                trailing: _preferences['language'] == language
-                    ? const Icon(Icons.check, color: Colors.green)
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _preferences['language'] = language;
-                  });
-                  Navigator.of(context).pop();
-                },
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('CANCEL'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Language selection dialog moved to SelectionDialogs class
 }
 
 // Helper function to get initials from name

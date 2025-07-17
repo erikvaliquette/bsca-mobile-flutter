@@ -126,41 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 32),
                   const Divider(),
                   
-                  // Profile sections
-                  _buildProfileSection(
-                    context,
-                    Icons.notifications_outlined,
-                    'Notification Settings',
-                    () => _showFeatureComingSoon(context),
-                  ),
-                  
-                  _buildProfileSection(
-                    context,
-                    Icons.lock_outline,
-                    'Privacy Settings',
-                    () => _showFeatureComingSoon(context),
-                  ),
-                  
-                  _buildProfileSection(
-                    context,
-                    Icons.language_outlined,
-                    'Language',
-                    () => _showFeatureComingSoon(context),
-                  ),
-                  
-                  _buildProfileSection(
-                    context,
-                    Icons.help_outline,
-                    'Help & Support',
-                    () => _showFeatureComingSoon(context),
-                  ),
-                  
-                  _buildProfileSection(
-                    context,
-                    Icons.info_outline,
-                    'About',
-                    () => _showFeatureComingSoon(context),
-                  ),
+                  // Profile sections removed - now edited in edit_profile_screen.dart
                   
                   const SizedBox(height: 16),
                   const Divider(),
@@ -174,6 +140,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            'Your selected Sustainable Development Goals:',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 12),
                           Wrap(
                             spacing: 12,
                             runSpacing: 12,
@@ -181,11 +152,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               // Extract SDG number from the goal name
                               final sdgNumber = _extractSDGNumber(goal);
                               if (sdgNumber != null) {
-                                return SDGIconWidget(
-                                  sdgNumber: sdgNumber,
-                                  size: 60,
-                                  showLabel: false,
-                                  onTap: () {}, // No action needed in profile view
+                                return Tooltip(
+                                  message: goal,
+                                  child: SDGIconWidget(
+                                    sdgNumber: sdgNumber,
+                                    size: 60,
+                                    showLabel: false,
+                                    onTap: () {}, // No action needed in profile view
+                                  ),
                                 );
                               } else {
                                 // Fallback for goals that don't match SDG pattern
@@ -195,6 +169,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 );
                               }
                             }).toList(),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Total: ${profile!.sdgGoals!.length} goals',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ),
@@ -241,6 +220,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildDefaultSettingsSection(context, profile!.preferences!),
                     ),
                     
+                  const SizedBox(height: 32),
+                  // Help & Support and About sections
+                  _buildProfileSection(
+                    context,
+                    Icons.help_outline,
+                    'Help & Support',
+                    () => _showFeatureComingSoon(context),
+                  ),
+                  
+                  _buildProfileSection(
+                    context,
+                    Icons.info_outline,
+                    'About',
+                    () => _showFeatureComingSoon(context),
+                  ),
+                  
                   const SizedBox(height: 32),
                   // Sign out button
                   ElevatedButton.icon(
