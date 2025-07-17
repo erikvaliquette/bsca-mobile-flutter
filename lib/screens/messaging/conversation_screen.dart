@@ -22,8 +22,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   bool _isLoadingMore = false;
+  bool _isScrolling = false;
   int _currentOffset = 0;
   final int _pageSize = 20;
+  String _roomName = 'Conversation';
 
   @override
   void initState() {
@@ -33,17 +35,48 @@ class _ConversationScreenState extends State<ConversationScreen> {
     
     // Add scroll listener for pagination
     _scrollController.addListener(_scrollListener);
+    
+    // Subscribe to realtime updates for this conversation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      messageProvider.subscribeToRoom(widget.roomId);
+    });
   }
 
   @override
   void dispose() {
-    _messageController.dispose();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
+    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    messageProvider.unsubscribeFromRoom();
+    
+    // Refresh chat rooms when leaving the conversation screen
+    // This ensures the chat list shows the latest messages
+    messageProvider.refreshChatRooms();
+    
+    _messageController.dispose();
     super.dispose();
   }
 
   void _scrollListener() {
+    // Track scrolling state to prevent auto-scroll during user interaction
+    final isUserScrolling = _scrollController.position.isScrollingNotifier.value;
+    
+    if (isUserScrolling) {
+      if (!_isScrolling) {
+        setState(() {
+          _isScrolling = true;
+        });
+      }
+    } else {
+      if (_isScrolling) {
+        setState(() {
+          _isScrolling = false;
+        });
+      }
+    }
+    
+    // Load more messages when near bottom
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
       _loadMoreMessages();
     }
@@ -59,6 +92,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final messageProvider = Provider.of<MessageProvider>(context, listen: false);
     await messageProvider.fetchMessages(widget.roomId, limit: _pageSize, offset: 0);
     _currentOffset = messageProvider.messages.length;
+    
+    // Set room name from chat room information
+    final roomIndex = messageProvider.chatRooms.indexWhere(
+      (room) => room.roomId == widget.roomId
+    );
+    
+    if (roomIndex != -1) {
+      final chatRoom = messageProvider.chatRooms[roomIndex];
+      setState(() {
+        _roomName = chatRoom.name ?? 'Conversation';
+      });
+    }
 
     setState(() {
       _isLoading = false;
@@ -122,17 +167,28 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final currentUserId = authProvider.user?.id;
+    
+    // Listen to message provider changes to scroll to bottom when new messages arrive
+    final messageProvider = Provider.of<MessageProvider>(context);
+    
+    // If we have messages and we're viewing the current room, scroll to bottom when new messages arrive
+    if (messageProvider.messages.isNotEmpty && 
+        messageProvider.messages[0].roomId == widget.roomId) {
+      // Use post frame callback to scroll after the UI is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients && !_isLoadingMore && !_isScrolling) {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<MessageProvider>(
-          builder: (context, messageProvider, child) {
-            final room = messageProvider.chatRooms
-                .firstWhere((room) => room.roomId == widget.roomId, 
-                           orElse: () => throw Exception('Room not found'));
-            return Text(room.name ?? 'Conversation');
-          },
-        ),
+        title: Text(_roomName),
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),

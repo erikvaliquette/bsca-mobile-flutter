@@ -119,9 +119,9 @@ class NotificationProvider extends ChangeNotifier {
     final userId = _supabaseClient.auth.currentUser?.id;
     if (userId == null) return;
     
-    // Get user's organization ID
+    // Get user's organization ID from profiles table
     _supabaseClient
-        .from('user_settings')
+        .from('profiles')
         .select('organization_id')
         .eq('id', userId)
         .single()

@@ -12,6 +12,7 @@ class MessageProvider extends ChangeNotifier {
   String? _error;
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _typingChannel;
+  final List<RealtimeChannel> _channels = []; // List to store additional realtime channels
 
   // Getters
   List<MessageModel> get messages => _messages;
@@ -21,6 +22,48 @@ class MessageProvider extends ChangeNotifier {
 
   // Initialize the provider
   bool _isInitialized = false;
+  
+  /// Explicitly refresh the chat rooms list to get the latest messages
+  Future<void> refreshChatRooms() async {
+    try {
+      debugPrint('Refreshing chat rooms and direct messages');
+      await _fetchChatRooms();
+      // Explicitly fetch direct messages to ensure we have the latest
+      await _fetchDirectMessages();
+      // Ensure realtime subscriptions are active
+      refreshMessageSubscriptions();
+      notifyListeners();
+      debugPrint('Chat rooms refreshed successfully');
+    } catch (e) {
+      debugPrint('Error refreshing chat rooms: $e');
+    }
+  }
+  
+  // Test method to verify realtime subscriptions are working
+  Future<void> testRealtimeSubscriptions() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('Cannot test realtime: User is null');
+      return;
+    }
+    
+    debugPrint('Testing realtime subscriptions for user: ${user.id}');
+    
+    // Force refresh of subscriptions
+    _subscribeToMessages();
+    
+    // Verify active channels
+    debugPrint('Active channels: ${_channels.length}');
+    for (var i = 0; i < _channels.length; i++) {
+      debugPrint('Channel $i: ${_channels[i].topic}');
+    }
+    
+    // Force a refresh of messages
+    await _fetchDirectMessages();
+    notifyListeners();
+    
+    debugPrint('Realtime subscription test completed');
+  }
   
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -435,28 +478,140 @@ class MessageProvider extends ChangeNotifier {
   }
 
   // Subscribe to real-time message updates
+  // Public method to refresh message subscriptions
+  void refreshMessageSubscriptions() {
+    _subscribeToMessages();
+  }
+  
   void _subscribeToMessages() {
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      debugPrint('Cannot subscribe to messages: User is null');
+      return;
+    }
+    
+    debugPrint('Setting up realtime subscriptions for user: ${user.id}');
 
     // Unsubscribe from any existing channels
-    _messagesChannel?.unsubscribe();
+    for (final channel in _channels) {
+      debugPrint('Removing existing channel');
+      Supabase.instance.client.removeChannel(channel);
+    }
+    _channels.clear();
+    
+    if (_messagesChannel != null) {
+      debugPrint('Removing existing messages channel');
+      Supabase.instance.client.removeChannel(_messagesChannel!);
+    }
 
     // Subscribe to the messages table for real-time updates
+    // We need to create separate subscriptions since OR filters aren't supported
+    
+    // Subscribe to direct messages where the user is the recipient
     _messagesChannel = Supabase.instance.client
-        .channel('public:messages')
+        .channel('direct_messages')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'messages',
-          callback: (payload) {
-            _handleNewMessage(payload.newRecord as Map<String, dynamic>);
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'recipient_id',
+            value: user.id,
+          ),
+          callback: (payload) async {
+            debugPrint('Received direct message as recipient: $payload');
+            try {
+              await _handleNewMessage(payload.newRecord);
+              // Force a refresh of chat rooms to ensure the UI updates
+              await refreshChatRooms();
+              debugPrint('Successfully processed inbound direct message');
+            } catch (e) {
+              debugPrint('Error handling inbound direct message: $e');
+            }
           },
         )
-        .subscribe();
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'sender_id',
+            value: user.id,
+          ),
+          callback: (payload) async {
+            debugPrint('Received direct message as sender: $payload');
+            try {
+              await _handleNewMessage(payload.newRecord);
+              // Force a refresh of chat rooms to ensure the UI updates
+              await refreshChatRooms();
+              debugPrint('Successfully processed outbound direct message');
+            } catch (e) {
+              debugPrint('Error handling outbound direct message: $e');
+            }
+          },
+        )
+        .subscribe((status, error) {
+          if (error != null) {
+            debugPrint('Error subscribing to direct messages: $error');
+          } else {
+            debugPrint('Direct messages subscription status: $status');
+          }
+        });
+    
+    // Store the direct messages channel for later cleanup
+    _channels.add(_messagesChannel!);
+    
+    // 2. Subscribe to room messages for rooms the user is in
+    // Only create this subscription if we have chat rooms
+    if (_chatRooms.isNotEmpty) {
+      // Since we can't use 'in_' filter, we'll create individual subscriptions for each room
+      // This is not ideal but will work with the current SDK limitations
+      for (final room in _chatRooms) {
+        if (room.roomId == null) continue;
+        
+        final roomId = room.roomId!;
+        final channelName = 'room_${roomId}_messages';
+        
+        debugPrint('Creating subscription for room: $roomId');
+        
+        // Create a subscription for this specific room
+        final roomChannel = Supabase.instance.client
+            .channel(channelName)
+            .onPostgresChanges(
+              event: PostgresChangeEvent.insert,
+              schema: 'public',
+              table: 'messages',
+              filter: PostgresChangeFilter(
+                type: PostgresChangeFilterType.eq,
+                column: 'room_id',
+                value: roomId,
+              ),
+              callback: (payload) async {
+                debugPrint('New message in room $roomId: ${payload.newRecord}');
+                try {
+                  await _handleNewMessage(payload.newRecord);
+                  // Force a refresh of chat rooms to ensure the UI updates
+                  await refreshChatRooms();
+                  debugPrint('Successfully processed room message');
+                } catch (e) {
+                  debugPrint('Error handling room message: $e');
+                }
+              },
+            )
+            .subscribe();
+        
+        // Store the channel for later cleanup
+        _channels.add(roomChannel);
+      }
+    }
+    
+    debugPrint('Subscribed to messages for user ${user.id} and ${_chatRooms.length} rooms');
   }
 
   // Handle a new message received via real-time subscription
+  // This method processes incoming messages from Supabase realtime API
   // Simple function to fetch user details from profiles table
   Future<Map<String, dynamic>> _fetchUserDetails(String userId) async {
     try {
@@ -508,69 +663,67 @@ class MessageProvider extends ChangeNotifier {
 
   // Fetch direct messages (private messages) for the current user
   Future<void> _fetchDirectMessages() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('Cannot fetch direct messages: User is null');
+      return;
+    }
+    
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-
+      debugPrint('Fetching direct messages for user ${user.id}');
+      
       // Fetch all direct messages where the current user is either sender or recipient
-      // and room_id is null
       final response = await Supabase.instance.client
           .from('messages')
           .select('*')
           .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
           .filter('room_id', 'is', null)
           .order('created_at', ascending: false);
-
-      // Group messages by conversation partner
+      
+      debugPrint('Fetched ${response.length} direct messages');
+      
+      // Group messages by conversation partner using virtual room IDs
       final Map<String, List<dynamic>> conversationsByPartner = {};
       final Map<String, Map<String, dynamic>> userDetailsCache = {};
       
+      // Process each message
+      // Debug: Print all messages to help diagnose issues
+      for (var i = 0; i < response.length && i < 5; i++) {
+        debugPrint('Message $i: ${response[i]}');
+      }
+      
       for (var message in response) {
-        String partnerId;
-        String partnerName = 'Unknown User';
+        // Verify message has required fields
+        if (message['sender_id'] == null || message['recipient_id'] == null) {
+          debugPrint('Skipping message with missing sender or recipient: ${message['id']}');
+          continue;
+        }
         
-        // Determine the conversation partner (the other person)
+        // Determine the partner ID (the other user in the conversation)
+        String partnerId;
         if (message['sender_id'] == user.id) {
           partnerId = message['recipient_id'];
-          
-          // Fetch user details if not already in cache
-          if (!userDetailsCache.containsKey(partnerId)) {
-            final userDetails = await _fetchUserDetails(partnerId);
-            if (userDetails != null) {
-              userDetailsCache[partnerId] = userDetails;
-            }
-          }
-          
-          // Use user details from cache if available
-          if (userDetailsCache.containsKey(partnerId)) {
-            final details = userDetailsCache[partnerId]!;
-            partnerName = details['username'] ?? 
-                         details['email'] ?? 
-                         'User $partnerId';
-          }
+          debugPrint('Message sent by current user to $partnerId');
         } else {
           partnerId = message['sender_id'];
-          
-          // Fetch user details if not already in cache
-          if (!userDetailsCache.containsKey(partnerId)) {
-            final userDetails = await _fetchUserDetails(partnerId);
-            if (userDetails != null) {
-              userDetailsCache[partnerId] = userDetails;
-            }
-          }
-          
-          // Use user details from cache if available
-          if (userDetailsCache.containsKey(partnerId)) {
-            final details = userDetailsCache[partnerId]!;
-            partnerName = details['username'] ?? 
-                         details['email'] ?? 
-                         'User $partnerId';
+          debugPrint('Message received from $partnerId to current user');
+        }
+        
+        debugPrint('Processing message ID: ${message['id']} - Content: ${message['content']}');
+        debugPrint('Message details - From: ${message['sender_id']}, To: ${message['recipient_id']}, Time: ${message['created_at']}');
+        
+        // Fetch user details if not already in cache
+        if (!userDetailsCache.containsKey(partnerId)) {
+          final userDetails = await _fetchUserDetails(partnerId);
+          if (userDetails != null) {
+            userDetailsCache[partnerId] = userDetails;
           }
         }
         
-        // Create a virtual room ID for direct messages - use a different format that won't be confused with actual room_id
-        // Instead of using room_id, we'll use a special format for the ID property
-        final virtualRoomId = 'dm_${user.id}_${partnerId}';
+        // Create a virtual room ID for direct messages
+        final List<String> userIds = [user.id, partnerId];
+        userIds.sort(); // Sort to ensure consistent order regardless of sender/recipient
+        final virtualRoomId = 'dm_${userIds.join('_')}';
         
         // Add message to the appropriate conversation group
         if (!conversationsByPartner.containsKey(virtualRoomId)) {
@@ -579,45 +732,39 @@ class MessageProvider extends ChangeNotifier {
         conversationsByPartner[virtualRoomId]!.add(message);
       }
       
-      // Create virtual chat rooms for direct messages
+      debugPrint('Grouped into ${conversationsByPartner.length} conversations');
+      
+      // Process each conversation and create virtual chat rooms
       for (var entry in conversationsByPartner.entries) {
         final String virtualRoomId = entry.key;
         final List<dynamic> messages = entry.value;
-        
-        // Skip if we already have this room
-        if (_chatRooms.any((room) => room.roomId == virtualRoomId)) {
-          continue;
-        }
         
         // Get the most recent message
         final latestMessage = messages.first;
         
         // Determine partner info
         String partnerId;
-        String partnerName = 'Unknown User';
-        
         if (latestMessage['sender_id'] == user.id) {
           partnerId = latestMessage['recipient_id'];
-          
-          // Use cached user details if available
-          if (userDetailsCache.containsKey(partnerId)) {
-            final details = userDetailsCache[partnerId]!;
-            partnerName = details['username'] ?? 'User $partnerId';
-          }
         } else {
           partnerId = latestMessage['sender_id'];
-          
-          // Use cached user details if available
-          if (userDetailsCache.containsKey(partnerId)) {
-            final details = userDetailsCache[partnerId]!;
-            partnerName = details['username'] ?? 'User $partnerId';
-          }
         }
+        
+        // Get partner name from cache
+        String partnerName = 'Unknown User';
+        if (userDetailsCache.containsKey(partnerId)) {
+          final details = userDetailsCache[partnerId]!;
+          partnerName = details['username'] ?? 
+                      details['email'] ?? 
+                      'User $partnerId';
+        }
+        
+        debugPrint('Creating virtual room for conversation with $partnerName ($partnerId)');
         
         // Count unread messages
         int unreadCount = 0;
         for (var msg in messages) {
-          if (msg['sender_id'] != user.id && msg['read'] == false) {
+          if (msg['sender_id'] != user.id && (msg['read'] == false || msg['read'] == null)) {
             unreadCount++;
           }
         }
@@ -628,82 +775,191 @@ class MessageProvider extends ChangeNotifier {
           avatarUrl = userDetailsCache[partnerId]!['avatar_url'];
         }
         
+        debugPrint('Creating virtual chat room with ID: $virtualRoomId for partner: $partnerName');
+        debugPrint('Last message: ${latestMessage['content']} at ${latestMessage['created_at']}');
+        debugPrint('Unread count: $unreadCount');
+        
         // Create a virtual chat room for this conversation
         final chatRoom = ChatRoomModel(
           id: virtualRoomId, // Use the virtual ID as both id and roomId
           roomId: virtualRoomId,
           createdAt: latestMessage['created_at'] != null
               ? DateTime.parse(latestMessage['created_at'])
-              : null,
+              : DateTime.now(),
           updatedAt: latestMessage['created_at'] != null
               ? DateTime.parse(latestMessage['created_at'])
-              : null,
+              : DateTime.now(),
           name: partnerName,
           lastMessage: latestMessage['content'],
           lastMessageTime: latestMessage['created_at'] != null
               ? DateTime.parse(latestMessage['created_at'])
-              : null,
-          unreadCount: messages.where((m) => 
-              m['recipient_id'] == user.id && 
-              m['read'] == false).length,
+              : DateTime.now(),
+          unreadCount: unreadCount,
           participantIds: [user.id, partnerId],
           isStarred: false,
           avatarUrl: avatarUrl,
         );
         
-        _chatRooms.add(chatRoom);
+        // Check if this room already exists in our list
+        final existingRoomIndex = _chatRooms.indexWhere((room) => room.roomId == virtualRoomId);
+        
+        if (existingRoomIndex >= 0) {
+          // Update the existing room with new information
+          debugPrint('Updating existing virtual room: $virtualRoomId');
+          _chatRooms[existingRoomIndex] = chatRoom;
+        } else {
+          // Add as a new room
+          debugPrint('Adding new virtual room: $virtualRoomId');
+          _chatRooms.add(chatRoom);
+        }
       }
       
       // Sort all chat rooms by last message time
       _chatRooms.sort((a, b) => 
         (b.lastMessageTime ?? DateTime(1970)).compareTo(a.lastMessageTime ?? DateTime(1970)));
+        
+      // Notify listeners to update the UI
+      notifyListeners();
       
     } catch (e) {
       debugPrint('Error fetching direct messages: $e');
     }
   }
 
-  void _handleNewMessage(Map<String, dynamic> payload) {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-
-      final newMessage = MessageModel.fromJson(payload['new']);
+  // Handle a new message from the realtime subscription
+  Future<void> _handleNewMessage(Map<String, dynamic> payload) async {
+    debugPrint('Handling new message: $payload');
+    
+    // Extract the new message data from the payload
+    final newMessage = MessageModel.fromJson(payload);
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    if (user == null) {
+      debugPrint('Cannot handle new message: User is null');
+      return;
+    }
+    
+    debugPrint('New message received - ID: ${newMessage.id}');
+    debugPrint('Content: ${newMessage.content}');
+    debugPrint('From: ${newMessage.senderId}');
+    debugPrint('To: ${newMessage.recipientId}');
+    debugPrint('Room ID: ${newMessage.roomId}');
+    debugPrint('Created at: ${newMessage.createdAt}');
+    
+    // Handle direct messages (messages with no room_id)
+    if (newMessage.roomId == null) {
+      debugPrint('Processing as direct message');
       
-      // Only process if this is a message for a room we're tracking
-      final roomIndex = _chatRooms.indexWhere((room) => room.roomId == newMessage.roomId);
-      if (roomIndex == -1) return;
-
-      // If this is a message from someone else to a room we're viewing
-      if (newMessage.senderId != user.id) {
-        // Add to messages list if we're already viewing this room
-        if (_messages.isNotEmpty && _messages[0].roomId == newMessage.roomId) {
-          _messages.insert(0, newMessage);
+      // Determine the other user ID (conversation partner)
+      final String otherUserId = newMessage.senderId == user.id 
+          ? newMessage.recipientId! 
+          : newMessage.senderId!;
+      
+      // Create a virtual room ID for direct messages
+      final List<String> userIds = [user.id, otherUserId];
+      userIds.sort(); // Sort to ensure consistent order regardless of sender/recipient
+      final String roomId = 'dm_${userIds.join('_')}';
+      debugPrint('Constructed virtual room ID for direct message: $roomId');
+      
+      // Find the room index
+      final roomIndex = _chatRooms.indexWhere((room) => room.roomId == roomId);
+      
+      // If this is a new room we don't have yet, create a virtual chat room
+      if (roomIndex == -1) {
+        debugPrint('New message for unknown room, creating virtual chat room');
+        
+        // For direct messages, we need to create a virtual chat room
+        if (newMessage.roomId == null) {
+          debugPrint('Creating virtual chat room for direct message with user: $otherUserId');
+          
+          // Fetch user details for the other user
+          final userDetails = await _fetchUserDetails(otherUserId);
+          final otherUserName = userDetails?['username'] ?? 
+                              userDetails?['email'] ?? 
+                              'User $otherUserId';
+          
+          debugPrint('Got user details for $otherUserId: $otherUserName');
+          
+          // Create a virtual chat room for this direct message
+          final newRoom = ChatRoomModel(
+            id: roomId, // Using the virtual room ID we constructed
+            roomId: roomId,
+            name: otherUserName,
+            lastMessage: newMessage.content,
+            lastMessageTime: newMessage.createdAt,
+            unreadCount: newMessage.senderId != user.id ? 1 : 0,
+            participantIds: [user.id, otherUserId],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          
+          debugPrint('Created virtual chat room: ${newRoom.name} with ID: ${newRoom.roomId}');
+          
+          // Add to the beginning of the chat rooms list
+          _chatRooms.insert(0, newRoom);
+          
+          // If we're viewing this room, add the message to the messages list
+          if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
+            _messages.insert(0, newMessage);
+          }
+          
+          // Force a refresh of direct messages to ensure we have all messages
+          await _fetchDirectMessages();
+          
+          // Notify listeners to update the UI
+          notifyListeners();
+          return;
         }
         
-        // Update unread count for the room
-        final updatedRoom = ChatRoomModel(
-          id: _chatRooms[roomIndex].id,
-          roomId: _chatRooms[roomIndex].roomId,
-          createdAt: _chatRooms[roomIndex].createdAt,
-          updatedAt: DateTime.now(),
-          name: _chatRooms[roomIndex].name,
-          lastMessage: newMessage.content,
-          lastMessageTime: newMessage.createdAt,
-          unreadCount: (_chatRooms[roomIndex].unreadCount ?? 0) + 1,
-          participantIds: _chatRooms[roomIndex].participantIds,
-          isStarred: _chatRooms[roomIndex].isStarred,
-        );
-        
-        // Update the room and move it to the top
-        _chatRooms[roomIndex] = updatedRoom;
-        if (roomIndex > 0) {
-          final room = _chatRooms.removeAt(roomIndex);
-          _chatRooms.insert(0, room);
-        }
-        
+        // For room messages, fetch chat rooms again
+        await _fetchChatRooms();
         notifyListeners();
+        return;
       }
+
+      // Add to messages list if we're already viewing this room
+      if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
+        // Check if the message is already in our list to avoid duplicates
+        if (!_messages.any((m) => m.id == newMessage.id)) {
+          _messages.insert(0, newMessage);
+          debugPrint('Added new message to active conversation');
+          notifyListeners();
+        }
+      }
+      
+      debugPrint('Updating existing chat room at index $roomIndex with new message');
+      
+      // Update the chat room with the latest message
+      final room = _chatRooms[roomIndex];
+      
+      // Only increment unread count if the message is from someone else and not already read
+      int newUnreadCount = room.unreadCount ?? 0;
+      if (newMessage.senderId != user.id && newMessage.read != true) {
+        newUnreadCount += 1;
+        debugPrint('Incrementing unread count to $newUnreadCount');
+      }
+      
+      _chatRooms[roomIndex] = room.copyWith(
+        lastMessage: newMessage.content,
+        lastMessageTime: newMessage.createdAt,
+        unreadCount: newUnreadCount,
+        updatedAt: DateTime.now(),
+      );
+      
+      // Move this room to the top of the list
+      if (roomIndex > 0) {
+        final room = _chatRooms.removeAt(roomIndex);
+        _chatRooms.insert(0, room);
+        debugPrint('Moved chat room to top of list');
+      }
+      
+      // Force a refresh of direct messages if this is a direct message
+      if (newMessage.roomId == null) {
+        debugPrint('Refreshing direct messages after receiving a new one');
+        await _fetchDirectMessages();
+      }
+      
+      notifyListeners();
     } catch (e) {
       debugPrint('Error handling new message: $e');
     }
@@ -816,10 +1072,80 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
+  // Subscribe to messages for a specific room
+  RealtimeChannel? _activeRoomChannel;
+  String? _activeRoomId;
+  
+  void subscribeToRoom(String roomId) {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    
+    // If we're already subscribed to this room, do nothing
+    if (_activeRoomId == roomId && _activeRoomChannel != null) {
+      debugPrint('Already subscribed to room $roomId');
+      return;
+    }
+    
+    // Unsubscribe from any previous room
+    unsubscribeFromRoom();
+    
+    _activeRoomId = roomId;
+    debugPrint('Subscribing to messages for room $roomId');
+    
+    // Create a channel specific to this room
+    _activeRoomChannel = Supabase.instance.client
+        .channel('room:$roomId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'room_id',
+            value: roomId,
+          ),
+          callback: (payload) async {
+            debugPrint('New message in room $roomId: ${payload.newRecord}');
+            await _handleNewMessage(payload.newRecord);
+          },
+        )
+        .subscribe();
+  }
+  
+  void unsubscribeFromRoom() {
+    if (_activeRoomChannel != null) {
+      debugPrint('Unsubscribing from room $_activeRoomId');
+      Supabase.instance.client.removeChannel(_activeRoomChannel!);
+      _activeRoomChannel = null;
+      _activeRoomId = null;
+    }
+  }
+  
   // Clean up resources
+  @override
   void dispose() {
-    _messagesChannel?.unsubscribe();
-    _typingChannel?.unsubscribe();
+    // Clean up main message channel
+    if (_messagesChannel != null) {
+      Supabase.instance.client.removeChannel(_messagesChannel!);
+      _messagesChannel = null;
+    }
+    
+    // Clean up typing channel
+    if (_typingChannel != null) {
+      Supabase.instance.client.removeChannel(_typingChannel!);
+      _typingChannel = null;
+    }
+    
+    // Clean up active room subscription
+    unsubscribeFromRoom();
+    
+    // Clean up any additional channels
+    for (final channel in _channels) {
+      debugPrint('Cleaning up additional channel');
+      Supabase.instance.client.removeChannel(channel);
+    }
+    _channels.clear();
+    
     super.dispose();
   }
 }

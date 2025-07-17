@@ -21,11 +21,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
     // Use Future.microtask to avoid calling setState during build
     Future.microtask(() => _initializeMessageProvider());
   }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // This ensures we refresh the chat list when returning to this screen
+    if (_isInitialized) {
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      // Force a full refresh of chat rooms and subscriptions
+      messageProvider.refreshChatRooms();
+      debugPrint('ChatListScreen: Refreshed chat rooms and subscriptions');
+    }
+  }
 
   Future<void> _initializeMessageProvider() async {
-    if (_isInitialized) return;
     final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    
+    // If already initialized, just refresh the chat rooms
+    if (_isInitialized) {
+      debugPrint('ChatListScreen: Refreshing chat rooms and subscriptions');
+      // Force a refresh of chat rooms to get the latest messages
+      await messageProvider.refreshChatRooms();
+      // Test realtime subscriptions to ensure they're working
+      await messageProvider.testRealtimeSubscriptions();
+      return;
+    }
+    
+    debugPrint('ChatListScreen: First time initialization');
+    // First time initialization
     await messageProvider.initialize();
+    // Test realtime subscriptions to ensure they're working
+    await messageProvider.testRealtimeSubscriptions();
     setState(() {
       _isInitialized = true;
     });

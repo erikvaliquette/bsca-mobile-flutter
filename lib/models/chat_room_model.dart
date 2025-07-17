@@ -74,4 +74,33 @@ class ChatRoomModel {
 
     return data;
   }
+  
+  // Create a copy of this ChatRoomModel with optional field updates
+  ChatRoomModel copyWith({
+    String? id,
+    String? roomId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? name,
+    String? lastMessage,
+    DateTime? lastMessageTime,
+    int? unreadCount,
+    List<String>? participantIds,
+    bool? isStarred,
+    String? avatarUrl,
+  }) {
+    return ChatRoomModel(
+      id: id ?? this.id,
+      roomId: roomId ?? this.roomId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      name: name ?? this.name,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastMessageTime: lastMessageTime ?? this.lastMessageTime,
+      unreadCount: unreadCount ?? this.unreadCount,
+      participantIds: participantIds ?? this.participantIds,
+      isStarred: isStarred ?? this.isStarred,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
 }
