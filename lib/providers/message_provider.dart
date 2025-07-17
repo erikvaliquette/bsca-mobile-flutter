@@ -39,30 +39,125 @@ class MessageProvider extends ChangeNotifier {
     }
   }
   
-  // Test method to verify realtime subscriptions are working
+  /// Test method to verify realtime subscriptions are active
   Future<void> testRealtimeSubscriptions() async {
+    debugPrint('Testing realtime subscriptions...');
+    
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      debugPrint('Cannot test realtime: User is null');
+      debugPrint('Cannot test subscriptions: User is null');
       return;
     }
     
-    debugPrint('Testing realtime subscriptions for user: ${user.id}');
+    debugPrint('Current user ID: ${user.id}');
+    debugPrint('Messages channel status: ${_messagesChannel?.socket.isConnected}');
+    debugPrint('Number of active channels: ${_channels.length}');
     
-    // Force refresh of subscriptions
-    _subscribeToMessages();
+    // Force a refresh of chat rooms
+    await refreshChatRooms();
     
-    // Verify active channels
-    debugPrint('Active channels: ${_channels.length}');
-    for (var i = 0; i < _channels.length; i++) {
-      debugPrint('Channel $i: ${_channels[i].topic}');
-    }
+    // Check for recent messages that should have triggered realtime
+    await testCheckRecentMessages();
     
-    // Force a refresh of messages
-    await _fetchDirectMessages();
-    notifyListeners();
+    // Test sending a message to trigger realtime
+    debugPrint('🔥 TEST: Sending test message to trigger realtime...');
+    await testSendDirectMessage('2c911795-329a-4f5b-8799-e7d215f524d6', 'Test message from Flutter app at ${DateTime.now()}');
     
     debugPrint('Realtime subscription test completed');
+  }
+  
+  /// Test method to send a direct message to verify realtime functionality
+  Future<void> testSendDirectMessage(String recipientId, String content) async {
+    debugPrint('🔥 TEST: Sending test direct message to $recipientId');
+    
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('🔥 TEST: Cannot send message: User is null');
+      return;
+    }
+    
+    try {
+      final response = await Supabase.instance.client
+          .from('messages')
+          .insert({
+            'sender_id': user.id,
+            'recipient_id': recipientId,
+            'content': content,
+            'room_id': null, // Direct message
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select()
+          .single();
+      
+      debugPrint('🔥 TEST: Message sent successfully: $response');
+    } catch (e) {
+      debugPrint('🔥 TEST: Error sending message: $e');
+    }
+  }
+  
+  /// Test method to check for recent messages that should have triggered realtime
+  Future<void> testCheckRecentMessages() async {
+    debugPrint('🔥 TEST: Checking for recent messages...');
+    
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('🔥 TEST: Cannot check messages: User is null');
+      return;
+    }
+    
+    try {
+      debugPrint('🔥 TEST: Querying for messages where recipient_id = ${user.id}');
+      
+      // Check for messages where current user is recipient (inbound)
+      final inboundMessages = await Supabase.instance.client
+          .from('messages')
+          .select('*')
+          .eq('recipient_id', user.id)
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(5);
+      
+      debugPrint('🔥 TEST: Found ${inboundMessages.length} recent inbound messages:');
+      for (var msg in inboundMessages) {
+        debugPrint('🔥 TEST: - ${msg['content']} from ${msg['sender_id']} at ${msg['created_at']}');
+      }
+      
+      // Also check ALL direct messages to see what's in the database
+      final allDirectMessages = await Supabase.instance.client
+          .from('messages')
+          .select('*')
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(10);
+      
+      debugPrint('🔥 TEST: Found ${allDirectMessages.length} total direct messages in database:');
+      for (var msg in allDirectMessages) {
+        debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} at ${msg['created_at']}');
+        if (msg['recipient_id'] == user.id) {
+          debugPrint('🔥 TEST:   ^^^ This should be an INBOUND message for current user!');
+        }
+        if (msg['sender_id'] == user.id) {
+          debugPrint('🔥 TEST:   ^^^ This is an OUTBOUND message from current user');
+        }
+      }
+      
+      // Check for messages where current user is sender (outbound)
+      final outboundMessages = await Supabase.instance.client
+          .from('messages')
+          .select('*')
+          .eq('sender_id', user.id)
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false)
+          .limit(5);
+      
+      debugPrint('🔥 TEST: Found ${outboundMessages.length} recent outbound messages:');
+      for (var msg in outboundMessages) {
+        debugPrint('🔥 TEST: - ${msg['content']} to ${msg['recipient_id']} at ${msg['created_at']}');
+      }
+      
+    } catch (e) {
+      debugPrint('🔥 TEST: Error checking messages: $e');
+    }
   }
   
   Future<void> initialize() async {
@@ -507,9 +602,13 @@ class MessageProvider extends ChangeNotifier {
     // Subscribe to the messages table for real-time updates
     // We need to create separate subscriptions since OR filters aren't supported
     
-    // Subscribe to direct messages where the user is the recipient
+    // Subscribe to direct messages where the user is the recipient (INBOUND)
+    debugPrint('Setting up realtime subscription for user: ${user.id}');
+    debugPrint('Creating separate channels for inbound and outbound messages');
+    
+    // INBOUND MESSAGES - where current user is recipient
     _messagesChannel = Supabase.instance.client
-        .channel('direct_messages')
+        .channel('inbound_messages_${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -520,17 +619,32 @@ class MessageProvider extends ChangeNotifier {
             value: user.id,
           ),
           callback: (payload) async {
-            debugPrint('Received direct message as recipient: $payload');
+            debugPrint('🔥 REALTIME INBOUND: Received message as RECIPIENT: $payload');
+            debugPrint('🔥 REALTIME INBOUND: New record: ${payload.newRecord}');
             try {
               await _handleNewMessage(payload.newRecord);
-              // Force a refresh of chat rooms to ensure the UI updates
               await refreshChatRooms();
-              debugPrint('Successfully processed inbound direct message');
+              debugPrint('🔥 REALTIME INBOUND: Successfully processed inbound message');
             } catch (e) {
-              debugPrint('Error handling inbound direct message: $e');
+              debugPrint('🔥 REALTIME INBOUND: Error handling inbound message: $e');
             }
           },
         )
+        .subscribe((status, error) {
+          if (error != null) {
+            debugPrint('❌ INBOUND: Error subscribing: $error');
+          } else {
+            debugPrint('✅ INBOUND: Subscription status: $status');
+            if (status == RealtimeSubscribeStatus.subscribed) {
+              debugPrint('🔥 REALTIME INBOUND: Successfully subscribed!');
+              debugPrint('🔥 REALTIME INBOUND: Listening for recipient_id = ${user.id}');
+            }
+          }
+        });
+    
+    // OUTBOUND MESSAGES - where current user is sender
+    final outboundChannel = Supabase.instance.client
+        .channel('outbound_messages_${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -541,24 +655,31 @@ class MessageProvider extends ChangeNotifier {
             value: user.id,
           ),
           callback: (payload) async {
-            debugPrint('Received direct message as sender: $payload');
+            debugPrint('🔥 REALTIME OUTBOUND: Received message as SENDER: $payload');
+            debugPrint('🔥 REALTIME OUTBOUND: New record: ${payload.newRecord}');
             try {
               await _handleNewMessage(payload.newRecord);
-              // Force a refresh of chat rooms to ensure the UI updates
               await refreshChatRooms();
-              debugPrint('Successfully processed outbound direct message');
+              debugPrint('🔥 REALTIME OUTBOUND: Successfully processed outbound message');
             } catch (e) {
-              debugPrint('Error handling outbound direct message: $e');
+              debugPrint('🔥 REALTIME OUTBOUND: Error handling outbound message: $e');
             }
           },
         )
         .subscribe((status, error) {
           if (error != null) {
-            debugPrint('Error subscribing to direct messages: $error');
+            debugPrint('❌ OUTBOUND: Error subscribing: $error');
           } else {
-            debugPrint('Direct messages subscription status: $status');
+            debugPrint('✅ OUTBOUND: Subscription status: $status');
+            if (status == RealtimeSubscribeStatus.subscribed) {
+              debugPrint('🔥 REALTIME OUTBOUND: Successfully subscribed!');
+              debugPrint('🔥 REALTIME OUTBOUND: Listening for sender_id = ${user.id}');
+            }
           }
         });
+    
+    // Store both channels for cleanup
+    _channels.add(outboundChannel);
     
     // Store the direct messages channel for later cleanup
     _channels.add(_messagesChannel!);
@@ -828,138 +949,145 @@ class MessageProvider extends ChangeNotifier {
 
   // Handle a new message from the realtime subscription
   Future<void> _handleNewMessage(Map<String, dynamic> payload) async {
-    debugPrint('Handling new message: $payload');
-    
-    // Extract the new message data from the payload
-    final newMessage = MessageModel.fromJson(payload);
-    final user = Supabase.instance.client.auth.currentUser;
-    
-    if (user == null) {
-      debugPrint('Cannot handle new message: User is null');
-      return;
-    }
-    
-    debugPrint('New message received - ID: ${newMessage.id}');
-    debugPrint('Content: ${newMessage.content}');
-    debugPrint('From: ${newMessage.senderId}');
-    debugPrint('To: ${newMessage.recipientId}');
-    debugPrint('Room ID: ${newMessage.roomId}');
-    debugPrint('Created at: ${newMessage.createdAt}');
-    
-    // Handle direct messages (messages with no room_id)
-    if (newMessage.roomId == null) {
-      debugPrint('Processing as direct message');
+    try {
+      debugPrint('🔥 HANDLE_MESSAGE: Starting to handle new message: $payload');
       
-      // Determine the other user ID (conversation partner)
-      final String otherUserId = newMessage.senderId == user.id 
-          ? newMessage.recipientId! 
-          : newMessage.senderId!;
+      // Extract the new message data from the payload
+      final newMessage = MessageModel.fromJson(payload);
+      final user = Supabase.instance.client.auth.currentUser;
       
-      // Create a virtual room ID for direct messages
-      final List<String> userIds = [user.id, otherUserId];
-      userIds.sort(); // Sort to ensure consistent order regardless of sender/recipient
-      final String roomId = 'dm_${userIds.join('_')}';
-      debugPrint('Constructed virtual room ID for direct message: $roomId');
+      if (user == null) {
+        debugPrint('🔥 HANDLE_MESSAGE: Cannot handle new message: User is null');
+        return;
+      }
       
-      // Find the room index
-      final roomIndex = _chatRooms.indexWhere((room) => room.roomId == roomId);
+      debugPrint('🔥 HANDLE_MESSAGE: Current user ID: ${user.id}');
+      debugPrint('🔥 HANDLE_MESSAGE: Message sender ID: ${newMessage.senderId}');
+      debugPrint('🔥 HANDLE_MESSAGE: Message recipient ID: ${newMessage.recipientId}');
+      debugPrint('🔥 HANDLE_MESSAGE: Is this an inbound message? ${newMessage.senderId != user.id}');
+    
+      debugPrint('New message received - ID: ${newMessage.id}');
+      debugPrint('Content: ${newMessage.content}');
+      debugPrint('From: ${newMessage.senderId}');
+      debugPrint('To: ${newMessage.recipientId}');
+      debugPrint('Room ID: ${newMessage.roomId}');
+      debugPrint('Created at: ${newMessage.createdAt}');
       
-      // If this is a new room we don't have yet, create a virtual chat room
-      if (roomIndex == -1) {
-        debugPrint('New message for unknown room, creating virtual chat room');
+      // Handle direct messages (messages with no room_id)
+      if (newMessage.roomId == null) {
+        debugPrint('Processing as direct message');
         
-        // For direct messages, we need to create a virtual chat room
-        if (newMessage.roomId == null) {
-          debugPrint('Creating virtual chat room for direct message with user: $otherUserId');
+        // Determine the other user ID (conversation partner)
+        final String otherUserId = newMessage.senderId == user.id 
+            ? newMessage.recipientId! 
+            : newMessage.senderId!;
+        
+        // Create a virtual room ID for direct messages
+        final List<String> userIds = [user.id, otherUserId];
+        userIds.sort(); // Sort to ensure consistent order regardless of sender/recipient
+        final String roomId = 'dm_${userIds.join('_')}';
+        debugPrint('Constructed virtual room ID for direct message: $roomId');
+        
+        // Find the room index
+        final roomIndex = _chatRooms.indexWhere((room) => room.roomId == roomId);
+      
+        // If this is a new room we don't have yet, create a virtual chat room
+        if (roomIndex == -1) {
+          debugPrint('New message for unknown room, creating virtual chat room');
           
-          // Fetch user details for the other user
-          final userDetails = await _fetchUserDetails(otherUserId);
-          final otherUserName = userDetails?['username'] ?? 
-                              userDetails?['email'] ?? 
-                              'User $otherUserId';
-          
-          debugPrint('Got user details for $otherUserId: $otherUserName');
-          
-          // Create a virtual chat room for this direct message
-          final newRoom = ChatRoomModel(
-            id: roomId, // Using the virtual room ID we constructed
-            roomId: roomId,
-            name: otherUserName,
-            lastMessage: newMessage.content,
-            lastMessageTime: newMessage.createdAt,
-            unreadCount: newMessage.senderId != user.id ? 1 : 0,
-            participantIds: [user.id, otherUserId],
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
-          
-          debugPrint('Created virtual chat room: ${newRoom.name} with ID: ${newRoom.roomId}');
-          
-          // Add to the beginning of the chat rooms list
-          _chatRooms.insert(0, newRoom);
-          
-          // If we're viewing this room, add the message to the messages list
-          if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
-            _messages.insert(0, newMessage);
+          // For direct messages, we need to create a virtual chat room
+          if (newMessage.roomId == null) {
+            debugPrint('Creating virtual chat room for direct message with user: $otherUserId');
+            
+            // Fetch user details for the other user
+            final userDetails = await _fetchUserDetails(otherUserId);
+            final otherUserName = userDetails?['username'] ?? 
+                                userDetails?['email'] ?? 
+                                'User $otherUserId';
+            
+            debugPrint('Got user details for $otherUserId: $otherUserName');
+            
+            // Create a virtual chat room for this direct message
+            final newRoom = ChatRoomModel(
+              id: roomId, // Using the virtual room ID we constructed
+              roomId: roomId,
+              name: otherUserName,
+              lastMessage: newMessage.content,
+              lastMessageTime: newMessage.createdAt,
+              unreadCount: newMessage.senderId != user.id ? 1 : 0,
+              participantIds: [user.id, otherUserId],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+            
+            debugPrint('Created virtual chat room: ${newRoom.name} with ID: ${newRoom.roomId}');
+            
+            // Add to the beginning of the chat rooms list
+            _chatRooms.insert(0, newRoom);
+            
+            // If we're viewing this room, add the message to the messages list
+            if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
+              _messages.insert(0, newMessage);
+            }
+            
+            // Force a refresh of direct messages to ensure we have all messages
+            await _fetchDirectMessages();
+            
+            // Notify listeners to update the UI
+            notifyListeners();
+            return;
           }
           
-          // Force a refresh of direct messages to ensure we have all messages
-          await _fetchDirectMessages();
-          
-          // Notify listeners to update the UI
+          // For room messages, fetch chat rooms again
+          await _fetchChatRooms();
           notifyListeners();
           return;
         }
-        
-        // For room messages, fetch chat rooms again
-        await _fetchChatRooms();
-        notifyListeners();
-        return;
-      }
 
-      // Add to messages list if we're already viewing this room
-      if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
-        // Check if the message is already in our list to avoid duplicates
-        if (!_messages.any((m) => m.id == newMessage.id)) {
-          _messages.insert(0, newMessage);
-          debugPrint('Added new message to active conversation');
-          notifyListeners();
+        // Add to messages list if we're already viewing this room
+        if (_messages.isNotEmpty && _messages[0].roomId == roomId) {
+          // Check if the message is already in our list to avoid duplicates
+          if (!_messages.any((m) => m.id == newMessage.id)) {
+            _messages.insert(0, newMessage);
+            debugPrint('Added new message to active conversation');
+            notifyListeners();
+          }
         }
+        
+        debugPrint('Updating existing chat room at index $roomIndex with new message');
+        
+        // Update the chat room with the latest message
+        final room = _chatRooms[roomIndex];
+        
+        // Only increment unread count if the message is from someone else and not already read
+        int newUnreadCount = room.unreadCount ?? 0;
+        if (newMessage.senderId != user.id && newMessage.read != true) {
+          newUnreadCount += 1;
+          debugPrint('Incrementing unread count to $newUnreadCount');
+        }
+        
+        _chatRooms[roomIndex] = room.copyWith(
+          lastMessage: newMessage.content,
+          lastMessageTime: newMessage.createdAt,
+          unreadCount: newUnreadCount,
+          updatedAt: DateTime.now(),
+        );
+        
+        // Move this room to the top of the list
+        if (roomIndex > 0) {
+          final room = _chatRooms.removeAt(roomIndex);
+          _chatRooms.insert(0, room);
+          debugPrint('Moved chat room to top of list');
+        }
+        
+        // Force a refresh of direct messages if this is a direct message
+        if (newMessage.roomId == null) {
+          debugPrint('Refreshing direct messages after receiving a new one');
+          await _fetchDirectMessages();
+        }
+        
+        notifyListeners();
       }
-      
-      debugPrint('Updating existing chat room at index $roomIndex with new message');
-      
-      // Update the chat room with the latest message
-      final room = _chatRooms[roomIndex];
-      
-      // Only increment unread count if the message is from someone else and not already read
-      int newUnreadCount = room.unreadCount ?? 0;
-      if (newMessage.senderId != user.id && newMessage.read != true) {
-        newUnreadCount += 1;
-        debugPrint('Incrementing unread count to $newUnreadCount');
-      }
-      
-      _chatRooms[roomIndex] = room.copyWith(
-        lastMessage: newMessage.content,
-        lastMessageTime: newMessage.createdAt,
-        unreadCount: newUnreadCount,
-        updatedAt: DateTime.now(),
-      );
-      
-      // Move this room to the top of the list
-      if (roomIndex > 0) {
-        final room = _chatRooms.removeAt(roomIndex);
-        _chatRooms.insert(0, room);
-        debugPrint('Moved chat room to top of list');
-      }
-      
-      // Force a refresh of direct messages if this is a direct message
-      if (newMessage.roomId == null) {
-        debugPrint('Refreshing direct messages after receiving a new one');
-        await _fetchDirectMessages();
-      }
-      
-      notifyListeners();
     } catch (e) {
       debugPrint('Error handling new message: $e');
     }
