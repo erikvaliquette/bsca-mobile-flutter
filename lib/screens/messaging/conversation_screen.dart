@@ -265,7 +265,19 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     }
                     
                     final message = messages[index];
+                    
+                    // Get the current user ID from the AuthProvider instead of relying on a local variable
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    final currentUserId = authProvider.user?.id;
+                    
+                    // Determine if the message is from the current user (outbound) or another user (inbound)
                     final isMe = message.senderId == currentUserId;
+                    
+                    // Debug: Print message rendering info
+                    debugPrint('🎨 UI RENDER: Message "${message.content}"');
+                    debugPrint('🎨 UI RENDER: message.senderId = ${message.senderId}');
+                    debugPrint('🎨 UI RENDER: currentUserId = $currentUserId');
+                    debugPrint('🎨 UI RENDER: isMe = $isMe (${isMe ? "BLUE BUBBLE" : "GRAY BUBBLE"})');
                     
                     return _buildMessageBubble(message, isMe);
                   },

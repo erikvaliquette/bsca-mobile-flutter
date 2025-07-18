@@ -63,7 +63,119 @@ class MessageProvider extends ChangeNotifier {
     debugPrint('🔥 TEST: Sending test message to trigger realtime...');
     await testSendDirectMessage('2c911795-329a-4f5b-8799-e7d215f524d6', 'Test message from Flutter app at ${DateTime.now()}');
     
+    // Wait a moment for the message to be processed
+    await Future.delayed(Duration(seconds: 2));
+    
+    // Test manual query for inbound messages
+    debugPrint('🔥 TEST: Manually querying for inbound messages from Apple Tester...');
+    await testQueryInboundMessages();
+    
+    // Test creating an inbound message from Apple Tester to Erik
+    await testCreateInboundMessage();
+    
+    // Test querying for specific inbound messages we know exist from web version
+    await testQuerySpecificInboundMessages();
+    
     debugPrint('Realtime subscription test completed');
+  }
+  
+  /// Test method to create an INBOUND message (from Apple Tester to Erik)
+  Future<void> testCreateInboundMessage() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('🔥 TEST INBOUND: Cannot create test message: User is null');
+      return;
+    }
+
+    try {
+      debugPrint('🔥 TEST INBOUND: Creating test message FROM Apple Tester TO Erik...');
+      
+      // Create a message FROM Apple Tester TO Erik (inbound for Erik)
+      final response = await Supabase.instance.client
+          .from('messages')
+          .insert({
+            'sender_id': '2c911795-329a-4f5b-8799-e7d215f524d6', // Apple Tester
+            'recipient_id': user.id, // Erik (current user)
+            'content': 'Test INBOUND message from Apple Tester to Erik at ${DateTime.now()}',
+            'created_at': DateTime.now().toIso8601String(),
+            'room_id': null, // Direct message
+            'read': false,
+          })
+          .select();
+      
+      debugPrint('🔥 TEST INBOUND: Successfully created inbound message: $response');
+      debugPrint('🔥 TEST INBOUND: This should trigger the realtime subscription!');
+      
+    } catch (e) {
+      debugPrint('🔥 TEST INBOUND: Error creating inbound message: $e');
+    }
+  }
+  
+  /// Test method to query for specific inbound messages that should exist based on web version
+  Future<void> testQuerySpecificInboundMessages() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('🔥 TEST SPECIFIC: Cannot query: User is null');
+      return;
+    }
+
+    try {
+      debugPrint('🔥 TEST SPECIFIC: Querying for messages containing "AT to EV" or "Apple tester to Erik"...');
+      
+      // Query for messages with content that matches what we see in web version
+      final atToEvMessages = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, content, created_at, read')
+          .or('content.ilike.%AT to EV%,content.ilike.%Apple tester to Erik%,content.ilike.%test from AT to EV%')
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false);
+      
+      debugPrint('🔥 TEST SPECIFIC: Found ${atToEvMessages.length} messages with AT to EV content:');
+      for (var message in atToEvMessages) {
+        debugPrint('🔥 TEST SPECIFIC: - "${message['content']}" from ${message['sender_id']} to ${message['recipient_id']} at ${message['created_at']}');
+        if (message['recipient_id'] == user.id) {
+          debugPrint('🔥 TEST SPECIFIC:   ^^^ This is an INBOUND message to Erik!');
+        } else {
+          debugPrint('🔥 TEST SPECIFIC:   ^^^ This is an OUTBOUND message from Erik');
+        }
+      }
+      
+      // Also try a broader search for any messages from Apple Tester to Erik
+      final broadSearch = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, content, created_at, read')
+          .eq('sender_id', '2c911795-329a-4f5b-8799-e7d215f524d6') // Apple Tester
+          .eq('recipient_id', user.id) // Erik
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false);
+      
+      debugPrint('🔥 TEST SPECIFIC: Broad search found ${broadSearch.length} messages from Apple Tester to Erik:');
+      for (var message in broadSearch) {
+        debugPrint('🔥 TEST SPECIFIC: - "${message['content']}" at ${message['created_at']}');
+      }
+      
+      // Check if the issue is with the main query in _fetchDirectMessages
+      debugPrint('🔥 TEST SPECIFIC: Now testing the EXACT same query used in _fetchDirectMessages...');
+      final mainQuery = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, content, created_at, updated_at, read, room_id, file_url, file_type, file_name, status, read_at')
+          .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false);
+      
+      debugPrint('🔥 TEST SPECIFIC: Main query found ${mainQuery.length} total messages:');
+      for (var message in mainQuery) {
+        if (message['sender_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6' || message['recipient_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
+          debugPrint('🔥 TEST SPECIFIC: APPLE TESTER MESSAGE: "${message['content']}" from ${message['sender_id']} to ${message['recipient_id']}');
+          if (message['recipient_id'] == user.id) {
+            debugPrint('🔥 TEST SPECIFIC:   ^^^ This should be INBOUND to Erik but might not be showing in UI!');
+          }
+        }
+      }
+      
+    } catch (e) {
+      debugPrint('🔥 TEST SPECIFIC: Error querying specific messages: $e');
+    }
   }
   
   /// Test method to send a direct message to verify realtime functionality
@@ -111,7 +223,7 @@ class MessageProvider extends ChangeNotifier {
       // Check for messages where current user is recipient (inbound)
       final inboundMessages = await Supabase.instance.client
           .from('messages')
-          .select('*')
+          .select('id, sender_id, recipient_id, content, created_at, read')
           .eq('recipient_id', user.id)
           .filter('room_id', 'is', null)
           .order('created_at', ascending: false)
@@ -125,7 +237,7 @@ class MessageProvider extends ChangeNotifier {
       // Also check ALL direct messages to see what's in the database
       final allDirectMessages = await Supabase.instance.client
           .from('messages')
-          .select('*')
+          .select('id, sender_id, recipient_id, content, created_at, read')
           .filter('room_id', 'is', null)
           .order('created_at', ascending: false)
           .limit(10);
@@ -144,7 +256,7 @@ class MessageProvider extends ChangeNotifier {
       // Check for messages where current user is sender (outbound)
       final outboundMessages = await Supabase.instance.client
           .from('messages')
-          .select('*')
+          .select('id, sender_id, recipient_id, content, created_at, read')
           .eq('sender_id', user.id)
           .filter('room_id', 'is', null)
           .order('created_at', ascending: false)
@@ -157,6 +269,129 @@ class MessageProvider extends ChangeNotifier {
       
     } catch (e) {
       debugPrint('🔥 TEST: Error checking messages: $e');
+    }
+  }
+  
+  /// Test method to manually query for inbound messages from Apple Tester
+  Future<void> testQueryInboundMessages() async {
+    debugPrint('🔥 TEST: Testing manual query for inbound messages...');
+    
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      debugPrint('🔥 TEST: Cannot query: User is null');
+      return;
+    }
+    
+    try {
+      // Query specifically for messages from Apple Tester to current user
+      final appleToErikMessages = await Supabase.instance.client
+          .from('messages')
+          .select('id, sender_id, recipient_id, content, created_at, read')
+          .eq('sender_id', '2c911795-329a-4f5b-8799-e7d215f524d6') // Apple Tester
+          .eq('recipient_id', user.id) // Current user (Erik)
+          .filter('room_id', 'is', null)
+          .order('created_at', ascending: false);
+      
+      debugPrint('🔥 TEST: Found ${appleToErikMessages.length} messages from Apple Tester to Erik:');
+      for (var msg in appleToErikMessages) {
+        debugPrint('🔥 TEST: - "${msg['content']}" at ${msg['created_at']} (read: ${msg['read']})');
+      }
+      
+      if (appleToErikMessages.isEmpty) {
+        debugPrint('🔥 TEST: No inbound messages found - this explains why realtime isn\'t triggering!');
+        
+        // Let's check what messages DO exist in the database
+        debugPrint('🔥 TEST: Checking what messages actually exist in the database...');
+        
+        // Check all messages involving Apple Tester
+        final allAppleMessages = await Supabase.instance.client
+            .from('messages')
+            .select('id, sender_id, recipient_id, content, created_at, read')
+            .or('sender_id.eq.2c911795-329a-4f5b-8799-e7d215f524d6,recipient_id.eq.2c911795-329a-4f5b-8799-e7d215f524d6')
+            .filter('room_id', 'is', null)
+            .order('created_at', ascending: false)
+            .limit(10);
+        
+        debugPrint('🔥 TEST: Found ${allAppleMessages.length} messages involving Apple Tester:');
+        for (var msg in allAppleMessages) {
+          debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} at ${msg['created_at']}');
+          if (msg['sender_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
+            debugPrint('🔥 TEST:   ^^^ Apple Tester is SENDER');
+          }
+          if (msg['recipient_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
+            debugPrint('🔥 TEST:   ^^^ Apple Tester is RECIPIENT');
+          }
+        }
+        
+        // Check if there are any messages where Erik is recipient (from anyone)
+        final erikAsRecipient = await Supabase.instance.client
+            .from('messages')
+            .select('id, sender_id, recipient_id, content, created_at, read')
+            .eq('recipient_id', user.id)
+            .filter('room_id', 'is', null)
+            .order('created_at', ascending: false)
+            .limit(5);
+        
+        debugPrint('🔥 TEST: Found ${erikAsRecipient.length} messages where Erik is recipient:');
+        for (var msg in erikAsRecipient) {
+          debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} at ${msg['created_at']}');
+        }
+        
+        // Check authentication status
+        debugPrint('🔥 TEST: Checking authentication status...');
+        debugPrint('🔥 TEST: Current user ID: ${user.id}');
+        debugPrint('🔥 TEST: Current user email: ${user.email}');
+        debugPrint('🔥 TEST: User metadata: ${user.userMetadata}');
+        
+        // Check session info
+        final session = Supabase.instance.client.auth.currentSession;
+        debugPrint('🔥 TEST: Session exists: ${session != null}');
+        if (session != null) {
+          debugPrint('🔥 TEST: Access token exists: ${session.accessToken.isNotEmpty}');
+          debugPrint('🔥 TEST: Token expires at: ${session.expiresAt}');
+        }
+        
+        // Try to read ALL messages (ignoring RLS temporarily)
+        debugPrint('🔥 TEST: Attempting to read ALL messages in the table...');
+        try {
+          final allMessages = await Supabase.instance.client
+              .from('messages')
+              .select('id, sender_id, recipient_id, content, created_at, room_id, read')
+              .order('created_at', ascending: false)
+              .limit(10);
+          
+          debugPrint('🔥 TEST: Successfully read ${allMessages.length} total messages from database:');
+          for (var msg in allMessages) {
+            debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} (room: ${msg['room_id']})');
+          }
+        } catch (e) {
+          debugPrint('🔥 TEST: ERROR reading all messages: $e');
+          debugPrint('🔥 TEST: The error suggests there might be invalid data in the database');
+          
+          // Try a simpler query to see if we can read anything at all
+          debugPrint('🔥 TEST: Trying a simpler query without room_id...');
+          try {
+            final simpleMessages = await Supabase.instance.client
+                .from('messages')
+                .select('id, content, created_at')
+                .limit(5);
+            
+            debugPrint('🔥 TEST: Simple query succeeded! Found ${simpleMessages.length} messages:');
+            for (var msg in simpleMessages) {
+              debugPrint('🔥 TEST: - "${msg['content']}" at ${msg['created_at']}');
+            }
+          } catch (e2) {
+            debugPrint('🔥 TEST: Even simple query failed: $e2');
+            debugPrint('🔥 TEST: This confirms RLS policies are blocking access!');
+          }
+        }
+        
+      } else {
+        debugPrint('🔥 TEST: Inbound messages exist but realtime subscription is not triggering!');
+      }
+      
+    } catch (e) {
+      debugPrint('🔥 TEST: Error querying inbound messages: $e');
     }
   }
   
@@ -195,7 +430,7 @@ class MessageProvider extends ChangeNotifier {
       final messagesResponse = await Supabase.instance.client
           .from('messages')
           .select('room_id')
-          .or('sender_id          .eq.${user.id},recipient_id.eq.${user.id}')
+          .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
           .not('room_id', 'is', null)
           .order('created_at', ascending: false);
       
@@ -358,16 +593,85 @@ class MessageProvider extends ChangeNotifier {
         }
         
         // Get messages between these two users (where room_id is null)
+        debugPrint('🔍 FETCH: Getting direct messages between users ${userIds[0]} and ${userIds[1]}');
+        
+        // Use the current user ID and partner ID directly to ensure we get all messages
+        final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+        String partnerId;
+        
+        // Determine which user ID is the partner (not the current user)
+        if (userIds[0] == currentUserId) {
+          partnerId = userIds[1];
+        } else if (userIds[1] == currentUserId) {
+          partnerId = userIds[0];
+        } else {
+          // If neither ID matches current user, use the original IDs
+          partnerId = userIds[1];
+        }
+        
+        debugPrint('🔍 FETCH: Current user: $currentUserId, Partner: $partnerId');
+        
+        // Query messages where current user is either sender or recipient AND partner is the other party
+        // Use explicit partner ID for Apple Tester conversations to ensure we get all messages
+        final bool isAppleTesterConversation = (partnerId == '2c911795-329a-4f5b-8799-e7d215f524d6');
+        
+        debugPrint('🔍 FETCH: Is Apple Tester conversation? $isAppleTesterConversation');
+        
+        // Special handling for Apple Tester conversations to ensure we get all messages
         final response = await Supabase.instance.client
             .from('messages')
             .select('*')
             .or(
-              'and(sender_id.eq.${userIds[0]},recipient_id.eq.${userIds[1]}),' +
-              'and(sender_id.eq.${userIds[1]},recipient_id.eq.${userIds[0]})'
+              'and(sender_id.eq.$currentUserId,recipient_id.eq.$partnerId),' +
+              'and(sender_id.eq.$partnerId,recipient_id.eq.$currentUserId)'
             )
             .filter('room_id', 'is', null)
             .order('created_at', ascending: false)
             .range(offset, offset + limit - 1);
+            
+        debugPrint('🔍 FETCH: Found ${response.length} direct messages');
+        for (var i = 0; i < response.length && i < 10; i++) {
+          debugPrint('🔍 FETCH: Message $i: ${response[i]["content"]} - From: ${response[i]["sender_id"]} To: ${response[i]["recipient_id"]}');
+        }
+        
+        // Double-check if we're missing any messages from Apple Tester
+        if (isAppleTesterConversation && response.length < 10) {
+          debugPrint('🔍 FETCH: Performing additional check for Apple Tester messages...');
+          
+          // Try a direct query for messages from Apple Tester to current user
+          final additionalCheck = await Supabase.instance.client
+              .from('messages')
+              .select('*')
+              .eq('sender_id', partnerId)
+              .eq('recipient_id', currentUserId)
+              .filter('room_id', 'is', null)
+              .order('created_at', ascending: false);
+              
+          debugPrint('🔍 FETCH: Additional check found ${additionalCheck.length} messages');
+          
+          // Add any messages that weren't in the original response
+          for (var newMsg in additionalCheck) {
+            bool isDuplicate = false;
+            for (var existingMsg in response) {
+              if (existingMsg['id'] == newMsg['id']) {
+                isDuplicate = true;
+                break;
+              }
+            }
+            
+            if (!isDuplicate) {
+              debugPrint('🔍 FETCH: Adding missing message: ${newMsg["content"]}');
+              response.add(newMsg);
+            }
+          }
+          
+          // Re-sort messages by created_at in descending order
+          response.sort((a, b) {
+            final DateTime aTime = DateTime.parse(a['created_at']);
+            final DateTime bTime = DateTime.parse(b['created_at']);
+            return bTime.compareTo(aTime); // Descending order
+          });
+        }
             
         data = response;
       } else {
@@ -796,7 +1100,7 @@ class MessageProvider extends ChangeNotifier {
       // Fetch all direct messages where the current user is either sender or recipient
       final response = await Supabase.instance.client
           .from('messages')
-          .select('*')
+          .select('id, sender_id, recipient_id, content, created_at, updated_at, read, room_id, file_url, file_type, file_name, status, read_at')
           .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
           .filter('room_id', 'is', null)
           .order('created_at', ascending: false);
