@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../providers/message_provider.dart';
+import '../../providers/business_connection_provider.dart';
 import '../../models/chat_room_model.dart';
+import '../../models/business_connection_model.dart';
 import 'conversation_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -292,25 +294,149 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _showNewConversationDialog() {
-    // TODO: Implement user selection for new conversation
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('New Conversation'),
-          content: const Text(
-            'User selection will be implemented in a future update.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('OK'),
+        return Dialog(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      topRight: Radius.circular(8),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'New Conversation',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                // Contact list
+                Expanded(
+                  child: Consumer<BusinessConnectionProvider>(
+                    builder: (context, connectionProvider, child) {
+                      if (connectionProvider.isLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      if (connectionProvider.connections.isEmpty) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'No connections yet',
+                                style: TextStyle(fontSize: 16, color: Colors.grey),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Add connections in the Network tab to start messaging',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      return ListView.builder(
+                        itemCount: connectionProvider.connections.length,
+                        itemBuilder: (context, index) {
+                          final connection = connectionProvider.connections[index];
+                          return _buildContactTile(connection);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
+    );
+    
+    // Load connections when dialog opens
+    Future.microtask(() {
+      final connectionProvider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      connectionProvider.fetchConnections();
+    });
+  }
+  
+  Widget _buildContactTile(BusinessConnection connection) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).primaryColor,
+        backgroundImage: connection.profileImageUrl != null 
+            ? NetworkImage(connection.profileImageUrl!) 
+            : null,
+        child: connection.profileImageUrl == null
+            ? Text(
+                connection.initials,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              )
+            : null,
+      ),
+      title: Text(
+        connection.name,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (connection.title != null) 
+            Text(connection.title!),
+          if (connection.organization != null)
+            Text(
+              connection.organization!,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+        ],
+      ),
+      onTap: () => _startConversationWithContact(connection),
+    );
+  }
+  
+  void _startConversationWithContact(BusinessConnection connection) {
+    Navigator.pop(context); // Close the dialog
+    
+    // Create a virtual room ID for direct messages
+    final currentUserId = Provider.of<MessageProvider>(context, listen: false)
+        .getCurrentUserId();
+    if (currentUserId == null) return;
+    
+    final userIds = [currentUserId, connection.counterpartyId];
+    userIds.sort(); // Sort to ensure consistent order
+    final virtualRoomId = 'dm_${userIds.join('_')}';
+    
+    // Navigate to conversation screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ConversationScreen(roomId: virtualRoomId),
+      ),
     );
   }
 }

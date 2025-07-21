@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../models/fuel_types.dart';
 import '../../services/connectivity_service.dart';
@@ -425,32 +426,60 @@ class TravelEmissionsScreen extends HookWidget {
       );
       final newEmissions = newDistance * emissionFactor;
       
-      // Update trip in database (works offline with local storage)
-      TravelEmissionsService.instance.updateTrip(
-        currentTrip.value!.id!,
-        {
-          'distance': newDistance,
-          'emissions': newEmissions,
-        },
-      ).catchError((error) {
-        debugPrint('Error updating trip: $error');
-        // Continue tracking even if there's an error updating the trip
-      });
+      // Check if this is the first meaningful movement (save trip to database)
+      final isTemporaryTrip = currentTrip.value!.id!.startsWith('temp_');
+      final hasMinimumDistance = newDistance >= 0.01; // 10 meters
       
-      // Add location point (works offline with local storage)
-      TravelEmissionsService.instance.addLocationPoint(
-        LocationPoint(
-          tripId: currentTrip.value!.id!,
-          latitude: position.latitude,
-          longitude: position.longitude,
-          timestamp: DateTime.now().toIso8601String(),
-          altitude: position.altitude,
-          speed: position.speed,
-        ),
-      ).catchError((error) {
-        debugPrint('Error adding location point: $error');
-        // Continue tracking even if there's an error saving the location point
-      });
+      if (isTemporaryTrip && hasMinimumDistance) {
+        // Save trip to database now that we have meaningful movement
+        final tripToSave = currentTrip.value!.copyWith(
+          id: null, // Remove temp ID so database can generate real ID
+          distance: newDistance,
+          emissions: newEmissions,
+        );
+        
+        TravelEmissionsService.instance.createTrip(tripToSave).then((savedTrip) {
+          if (savedTrip != null) {
+            // Update current trip with real database ID
+            currentTrip.value = savedTrip.copyWith(
+              distance: newDistance,
+              emissions: newEmissions,
+            );
+            debugPrint('Trip saved to database with ID: ${savedTrip.id}');
+          }
+        }).catchError((error) {
+          debugPrint('Error saving trip to database: $error');
+        });
+      } else if (!isTemporaryTrip) {
+        // Update existing trip in database
+        TravelEmissionsService.instance.updateTrip(
+          currentTrip.value!.id!,
+          {
+            'distance': newDistance,
+            'emissions': newEmissions,
+          },
+        ).catchError((error) {
+          debugPrint('Error updating trip: $error');
+          // Continue tracking even if there's an error updating the trip
+        });
+      }
+      
+      // Only save location points if trip is saved in database (not temporary)
+      if (!currentTrip.value!.id!.startsWith('temp_')) {
+        TravelEmissionsService.instance.addLocationPoint(
+          LocationPoint(
+            tripId: currentTrip.value!.id!,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            timestamp: DateTime.now().toIso8601String(),
+            altitude: position.altitude,
+            speed: position.speed,
+          ),
+        ).catchError((error) {
+          debugPrint('Error adding location point: $error');
+          // Continue tracking even if there's an error saving the location point
+        });
+      }
       
       // Update current trip
       currentTrip.value = TripData(
@@ -527,7 +556,9 @@ class TravelEmissionsScreen extends HookWidget {
           );
         }
         
-        // Create a new trip
+        // Create a new trip with start location
+        final startLocationString = '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+        
         final newTrip = TripData(
           userId: user.id,
           startTime: DateTime.now(),
@@ -537,28 +568,16 @@ class TravelEmissionsScreen extends HookWidget {
           emissions: 0.0,
           isActive: true,
           purpose: selectedPurpose.value,
+          startLocation: startLocationString,
         );
         
-        // Save trip using our offline-capable service
-        final savedTrip = await TravelEmissionsService.instance.createTrip(newTrip);
-        
-        if (savedTrip != null) {
-          currentTrip.value = savedTrip;
+        // Don't save trip to database yet - wait for meaningful movement
+        // Keep trip in memory with a temporary local ID
+        final tempTrip = newTrip.copyWith(id: 'temp_${const Uuid().v4()}');
+        currentTrip.value = tempTrip;
           
-          // Add initial location point - will be saved locally if offline
-          await TravelEmissionsService.instance.addLocationPoint(
-            LocationPoint(
-              tripId: savedTrip.id!,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              timestamp: DateTime.now().toIso8601String(),
-              altitude: position.altitude,
-              speed: position.speed,
-            ),
-          ).catchError((error) {
-            debugPrint('Error adding initial location point: $error');
-            // Continue tracking even if there's an error saving the location point
-          });
+          // Don't save location points yet since trip isn't in database
+          // Location points will be saved when trip gets meaningful movement
           
           // Start position stream
           positionStream.value = LocationService.instance.getPositionStream(
@@ -581,7 +600,6 @@ class TravelEmissionsScreen extends HookWidget {
               content: Text('Started tracking your ${getTravelModeName(selectedMode.value, travelModes)} journey'),
             ),
           );
-        }
       } catch (e) {
         debugPrint('Error starting tracking: $e');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -603,6 +621,30 @@ class TravelEmissionsScreen extends HookWidget {
         positionStream.value = null;
         
         if (currentTrip.value != null) {
+          // Check if trip has meaningful distance (minimum 0.01 km = 10 meters)
+          final minDistance = 0.01; // 10 meters minimum
+          final tripDistance = currentTrip.value!.distance;
+          
+          if (tripDistance < minDistance) {
+            // For temporary trips, just discard them. For saved trips, delete from database.
+            if (!currentTrip.value!.id!.startsWith('temp_')) {
+              await TravelEmissionsService.instance.deleteTrip(currentTrip.value!.id!);
+            }
+            
+            currentTrip.value = null;
+            lastPosition.value = null;
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Trip cancelled - no significant movement detected'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            
+            isTracking.value = false;
+            return;
+          }
+          
           // Check connectivity and show appropriate message
           final isConnected = ConnectivityService.instance.isConnected;
           if (!isConnected) {
@@ -614,28 +656,55 @@ class TravelEmissionsScreen extends HookWidget {
             );
           }
           
-          // Update trip in database (works offline with local storage)
           final endTime = DateTime.now();
-          final updates = {
-            'end_time': endTime.toIso8601String(),
-            'distance': currentTrip.value!.distance,
-            'emissions': currentTrip.value!.emissions,
-            'is_active': false,
-            'fuel_type': currentTrip.value!.fuelType,
-          };
           
-          await TravelEmissionsService.instance.updateTrip(
-            currentTrip.value!.id!,
-            updates,
-          );
+          // Add end location if we have a last position
+          String? endLocationString;
+          if (lastPosition.value != null) {
+            endLocationString = '${lastPosition.value!.latitude.toStringAsFixed(6)}, ${lastPosition.value!.longitude.toStringAsFixed(6)}';
+          }
           
-          // Batch sync location points for this trip
-          TravelEmissionsService.instance.syncTripLocationPoints(
-            currentTrip.value!.id!,
-          ).catchError((error) {
-            debugPrint('Error syncing location points: $error');
-            // Continue even if sync fails - points will be synced later
-          });
+          // Handle temporary trips that need to be saved to database
+          if (currentTrip.value!.id!.startsWith('temp_')) {
+            // Save temporary trip to database
+            final tripToSave = currentTrip.value!.copyWith(
+              id: null, // Remove temp ID
+              endTime: endTime,
+              endLocation: endLocationString,
+              isActive: false,
+            );
+            
+            final savedTrip = await TravelEmissionsService.instance.createTrip(tripToSave);
+            if (savedTrip != null) {
+              currentTrip.value = savedTrip;
+              debugPrint('Temporary trip saved to database with ID: ${savedTrip.id}');
+            }
+          } else {
+            // Update existing trip in database
+            final updates = {
+              'end_time': endTime.toIso8601String(),
+              'distance': currentTrip.value!.distance,
+              'emissions': currentTrip.value!.emissions,
+              'is_active': false,
+              'fuel_type': currentTrip.value!.fuelType,
+              if (endLocationString != null) 'end_location': endLocationString,
+            };
+            
+            await TravelEmissionsService.instance.updateTrip(
+              currentTrip.value!.id!,
+              updates,
+            );
+          }
+          
+          // Batch sync location points for this trip (only if it was saved in database)
+          if (!currentTrip.value!.id!.startsWith('temp_')) {
+            TravelEmissionsService.instance.syncTripLocationPoints(
+              currentTrip.value!.id!,
+            ).catchError((error) {
+              debugPrint('Error syncing location points: $error');
+              // Continue even if sync fails - points will be synced later
+            });
+          }
           
           // Add trip to list
           final updatedTrip = TripData(

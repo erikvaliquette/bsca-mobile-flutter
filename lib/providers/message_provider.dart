@@ -699,10 +699,17 @@ class MessageProvider extends ChangeNotifier {
       if (fileType != null) messageData['file_type'] = fileType;
       if (fileName != null) messageData['file_name'] = fileName;
 
+      // 🔍 DEBUG: Log the exact data being sent to Supabase
+      debugPrint('🔍 SENDING TO SUPABASE: ${messageData.toString()}');
+      debugPrint('🔍 room_id value: "${messageData['room_id']}" (type: ${messageData['room_id'].runtimeType})');
+      
       final response = await Supabase.instance.client
           .from('messages')
           .insert(messageData)
           .select();
+      
+      // 🔍 DEBUG: Log what came back from Supabase
+      debugPrint('🔍 RECEIVED FROM SUPABASE: ${response[0].toString()}');
 
       final newMessage = MessageModel.fromJson(response[0]);
       _messages.insert(0, newMessage);
@@ -1497,6 +1504,11 @@ class MessageProvider extends ChangeNotifier {
       _activeRoomChannel = null;
       _activeRoomId = null;
     }
+  }
+  
+  /// Get the current user's ID
+  String? getCurrentUserId() {
+    return Supabase.instance.client.auth.currentUser?.id;
   }
   
   // Clean up resources

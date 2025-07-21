@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 class MessageModel {
   final String id;
@@ -50,6 +51,9 @@ class MessageModel {
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
+    // 🔍 DEBUG: Log incoming JSON data
+    debugPrint('🔍 MessageModel.fromJson - room_id from JSON: "${json['room_id']}" (type: ${json['room_id'].runtimeType})');
+    
     return MessageModel(
       id: json['id'],
       senderId: json['sender_id'],
