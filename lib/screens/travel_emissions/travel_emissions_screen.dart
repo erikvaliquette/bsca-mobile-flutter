@@ -9,11 +9,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/fuel_types.dart';
+import '../../models/organization_model.dart';
+import '../../providers/organization_provider.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/location_service.dart';
 import '../../services/travel_emissions_service.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../widgets/loading_indicator.dart';
+import 'package:provider/provider.dart';
 
 class TravelEmissionsScreen extends HookWidget {
   const TravelEmissionsScreen({Key? key}) : super(key: key);
@@ -248,6 +251,12 @@ class TravelEmissionsScreen extends HookWidget {
                               selectedFuelType.value = null;
                             }
                             
+                            // Handle organization attribution for business trips
+                            String? selectedOrganizationId;
+                            if (dialogPurpose == 'Business') {
+                              selectedOrganizationId = await _showOrganizationSelectionDialog(context);
+                            }
+                            
                             // Update trip in database
                             await TravelEmissionsService.instance.updateTrip(
                               trip.id!,
@@ -257,8 +266,23 @@ class TravelEmissionsScreen extends HookWidget {
                                 'emissions': newEmissions,
                                 if (FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': dialogFuelType,
                                 if (!FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': null,
+                                if (selectedOrganizationId != null) 'organization_id': selectedOrganizationId,
+                                if (dialogPurpose != 'Business') 'organization_id': null, // Clear organization if not business
                               },
                             );
+                            
+                            // Handle organization emissions attribution
+                            if (dialogPurpose == 'Business' && selectedOrganizationId != null && newEmissions > 0) {
+                              // If this was previously a business trip with different organization, we should ideally
+                              // subtract from old organization and add to new one, but for simplicity we'll just add to new
+                              TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                                selectedOrganizationId,
+                                newEmissions,
+                                trip.id!,
+                              ).catchError((error) {
+                                debugPrint('Error attributing emissions to organization: $error');
+                              });
+                            }
                             
                             // Close the dialog
                             Navigator.of(context).pop();
@@ -610,6 +634,100 @@ class TravelEmissionsScreen extends HookWidget {
       }
     }
     
+    // Show organization selection dialog for business trips
+    Future<String?> _showOrganizationSelectionDialog(BuildContext context) async {
+      final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+      final organizations = organizationProvider.organizations;
+      
+      if (organizations.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No organizations found. Business trip will be saved without organization attribution.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return null;
+      }
+      
+      if (organizations.length == 1) {
+        // Only one organization, use it automatically
+        return organizations.first.id;
+      }
+      
+      // Multiple organizations, show selection dialog
+      return showDialog<String>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              'Select Organization',
+              style: TextStyle(
+                color: Theme.of(context).primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Which organization should this business trip be attributed to?',
+                    style: TextStyle(fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: organizations.length,
+                    itemBuilder: (context, index) {
+                      final org = organizations[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            child: Text(
+                              org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Text(
+                            org.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: org.description != null
+                              ? Text(
+                                  org.description!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : null,
+                          onTap: () {
+                            Navigator.of(context).pop(org.id);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(null);
+                },
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+    
     // Stop tracking
     Future<void> stopTracking() async {
       isLoading.value = true;
@@ -664,6 +782,12 @@ class TravelEmissionsScreen extends HookWidget {
             endLocationString = '${lastPosition.value!.latitude.toStringAsFixed(6)}, ${lastPosition.value!.longitude.toStringAsFixed(6)}';
           }
           
+          // Handle organization attribution for business trips
+          String? selectedOrganizationId;
+          if (currentTrip.value!.purpose == 'Business') {
+            selectedOrganizationId = await _showOrganizationSelectionDialog(context);
+          }
+          
           // Handle temporary trips that need to be saved to database
           if (currentTrip.value!.id!.startsWith('temp_')) {
             // Save temporary trip to database
@@ -672,12 +796,24 @@ class TravelEmissionsScreen extends HookWidget {
               endTime: endTime,
               endLocation: endLocationString,
               isActive: false,
+              organizationId: selectedOrganizationId,
             );
             
             final savedTrip = await TravelEmissionsService.instance.createTrip(tripToSave);
             if (savedTrip != null) {
               currentTrip.value = savedTrip;
               debugPrint('Temporary trip saved to database with ID: ${savedTrip.id}');
+              
+              // Attribute emissions to organization if this is a business trip
+              if (selectedOrganizationId != null && savedTrip.emissions > 0) {
+                TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                  selectedOrganizationId,
+                  savedTrip.emissions,
+                  savedTrip.id!,
+                ).catchError((error) {
+                  debugPrint('Error attributing emissions to organization: $error');
+                });
+              }
             }
           } else {
             // Update existing trip in database
@@ -688,12 +824,24 @@ class TravelEmissionsScreen extends HookWidget {
               'is_active': false,
               'fuel_type': currentTrip.value!.fuelType,
               if (endLocationString != null) 'end_location': endLocationString,
+              if (selectedOrganizationId != null) 'organization_id': selectedOrganizationId,
             };
             
             await TravelEmissionsService.instance.updateTrip(
               currentTrip.value!.id!,
               updates,
             );
+            
+            // Attribute emissions to organization if this is a business trip
+            if (selectedOrganizationId != null && currentTrip.value!.emissions > 0) {
+              TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                selectedOrganizationId,
+                currentTrip.value!.emissions,
+                currentTrip.value!.id!,
+              ).catchError((error) {
+                debugPrint('Error attributing emissions to organization: $error');
+              });
+            }
           }
           
           // Batch sync location points for this trip (only if it was saved in database)
@@ -718,6 +866,7 @@ class TravelEmissionsScreen extends HookWidget {
             emissions: currentTrip.value!.emissions,
             isActive: false,
             purpose: currentTrip.value!.purpose,
+            organizationId: selectedOrganizationId,
           );
           
           trips.value = [updatedTrip, ...trips.value];

@@ -29,14 +29,15 @@ class LocalTripDataAdapter extends TypeAdapter<LocalTripData> {
       endLocation: fields[9] as String?,
       isActive: fields[10] as bool,
       purpose: fields[11] as String?,
-      isSynced: fields[12] as bool,
+      organizationId: fields[12] as String?,
+      isSynced: fields[13] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, LocalTripData obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,6 +63,8 @@ class LocalTripDataAdapter extends TypeAdapter<LocalTripData> {
       ..writeByte(11)
       ..write(obj.purpose)
       ..writeByte(12)
+      ..write(obj.organizationId)
+      ..writeByte(13)
       ..write(obj.isSynced);
   }
 

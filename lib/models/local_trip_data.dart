@@ -45,6 +45,9 @@ class LocalTripData {
   final String? purpose;
 
   @HiveField(12)
+  final String? organizationId;
+
+  @HiveField(13)
   final bool isSynced;
 
   LocalTripData({
@@ -60,6 +63,7 @@ class LocalTripData {
     this.endLocation,
     required this.isActive,
     this.purpose,
+    this.organizationId,
     this.isSynced = false,
   });
 
@@ -78,6 +82,7 @@ class LocalTripData {
       endLocation: endLocation,
       isActive: isActive,
       purpose: purpose,
+      organizationId: organizationId,
     );
   }
 
@@ -96,6 +101,7 @@ class LocalTripData {
       endLocation: tripData.endLocation,
       isActive: tripData.isActive,
       purpose: tripData.purpose,
+      organizationId: tripData.organizationId,
       isSynced: isSynced,
     );
   }

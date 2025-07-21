@@ -287,15 +287,14 @@ class TravelEmissionsService {
       }
       
       // Get unsynced location points for this trip
-      final unsyncedPoints = LocalStorageService.instance.getTripLocationPoints(tripId)
-          .where((point) => !point.isSynced)
-          .toList();
+      final unsyncedPoints = LocalStorageService.instance.getUnsyncedLocationPointsForTrip(tripId);
       
       if (unsyncedPoints.isEmpty) {
-        return true; // Nothing to sync
+        debugPrint('No unsynced location points for trip $tripId');
+        return true;
       }
       
-      // Convert to JSON and batch insert
+      // Convert to JSON format for Supabase
       final pointsJson = unsyncedPoints
           .map((localPoint) => localPoint.toLocationPoint().toJson())
           .toList();
@@ -318,6 +317,54 @@ class TravelEmissionsService {
       return false;
     }
   }
+  
+  /// Attribute trip emissions to organization's carbon footprint
+  Future<bool> attributeEmissionsToOrganization(String organizationId, double emissions, String tripId) async {
+    try {
+      if (!ConnectivityService.instance.isConnected) {
+        debugPrint('Offline - organization emissions attribution will be synced later');
+        return false;
+      }
+      
+      // Check if organization carbon footprint record exists
+      final existingRecord = await _client
+          .from('organization_carbon_footprint')
+          .select('id, travel_emissions')
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+      
+      if (existingRecord != null) {
+        // Update existing record
+        final currentEmissions = double.parse(existingRecord['travel_emissions']?.toString() ?? '0');
+        final newTotalEmissions = currentEmissions + emissions;
+        
+        await _client
+            .from('organization_carbon_footprint')
+            .update({
+              'travel_emissions': newTotalEmissions,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', existingRecord['id']);
+      } else {
+        // Create new record
+        await _client
+            .from('organization_carbon_footprint')
+            .insert({
+              'organization_id': organizationId,
+              'travel_emissions': emissions,
+              'total_emissions': emissions, // Initialize with travel emissions
+              'created_at': DateTime.now().toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            });
+      }
+      
+      debugPrint('Successfully attributed $emissions kg CO2e to organization $organizationId');
+      return true;
+    } catch (e) {
+      debugPrint('Error attributing emissions to organization: $e');
+      return false;
+    }
+  }
 }
 
 /// Data model for a travel trip
@@ -336,6 +383,7 @@ class TripData {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? purpose;
+  final String? organizationId;
   
   TripData({
     this.id,
@@ -352,6 +400,7 @@ class TripData {
     this.createdAt,
     this.updatedAt,
     this.purpose,
+    this.organizationId,
   });
   
   factory TripData.fromJson(Map<String, dynamic> json) {
@@ -370,6 +419,7 @@ class TripData {
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       purpose: json['purpose'],
+      organizationId: json['organization_id'],
     );
   }
   
@@ -388,6 +438,7 @@ class TripData {
       if (endLocation != null) 'end_location': endLocation,
       'is_active': isActive,
       if (purpose != null) 'purpose': purpose,
+      if (organizationId != null) 'organization_id': organizationId,
     };
   }
   
@@ -407,6 +458,7 @@ class TripData {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? purpose,
+    String? organizationId,
   }) {
     return TripData(
       id: id ?? this.id,
@@ -423,6 +475,7 @@ class TripData {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       purpose: purpose ?? this.purpose,
+      organizationId: organizationId ?? this.organizationId,
     );
   }
 }
