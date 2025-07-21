@@ -360,14 +360,21 @@ class TravelEmissionsScreen extends HookWidget {
                             if (dialogPurpose == 'Business' && selectedOrganizationId != null && newEmissions > 0) {
                               // If this was previously a business trip with different organization, we should ideally
                               // subtract from old organization and add to new one, but for simplicity we'll just add to new
-                              TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                                selectedOrganizationId,
-                                newEmissions,
-                                trip.id!,
-                              ).catchError((error) {
-                                debugPrint('Error attributing emissions to organization: $error');
-                                return false;
-                              });
+                              debugPrint('🏢 Attempting to attribute $newEmissions kg CO2e to organization $selectedOrganizationId (from edit)');
+                              try {
+                                final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                                  selectedOrganizationId,
+                                  newEmissions,
+                                  trip.id!,
+                                );
+                                if (attributionSuccess) {
+                                  debugPrint('✅ Successfully attributed emissions to organization (from edit)');
+                                } else {
+                                  debugPrint('⚠️ Failed to attribute emissions to organization (from edit)');
+                                }
+                              } catch (error) {
+                                debugPrint('❌ Exception during emission attribution (from edit): $error');
+                              }
                             }
                             
                             // Close the dialog
@@ -885,14 +892,21 @@ class TravelEmissionsScreen extends HookWidget {
               
               // Attribute emissions to organization if this is a business trip
               if (selectedOrganizationId != null && savedTrip.emissions > 0) {
-                TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                  selectedOrganizationId,
-                  savedTrip.emissions,
-                  savedTrip.id!,
-                ).catchError((error) {
-                  debugPrint('Error attributing emissions to organization: $error');
-                  return false;
-                });
+                debugPrint('🏢 Attempting to attribute ${savedTrip.emissions} kg CO2e to organization $selectedOrganizationId');
+                try {
+                  final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                    selectedOrganizationId,
+                    savedTrip.emissions,
+                    savedTrip.id!,
+                  );
+                  if (attributionSuccess) {
+                    debugPrint('✅ Successfully attributed emissions to organization');
+                  } else {
+                    debugPrint('⚠️ Failed to attribute emissions to organization');
+                  }
+                } catch (error) {
+                  debugPrint('❌ Exception during emission attribution: $error');
+                }
               }
             }
           } else {
@@ -914,14 +928,21 @@ class TravelEmissionsScreen extends HookWidget {
             
             // Attribute emissions to organization if this is a business trip
             if (selectedOrganizationId != null && currentTrip.value!.emissions > 0) {
-              TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                selectedOrganizationId,
-                currentTrip.value!.emissions,
-                currentTrip.value!.id!,
-              ).catchError((error) {
-                debugPrint('Error attributing emissions to organization: $error');
-                return false;
-              });
+              debugPrint('🏢 Attempting to attribute ${currentTrip.value!.emissions} kg CO2e to organization $selectedOrganizationId');
+              try {
+                final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
+                  selectedOrganizationId,
+                  currentTrip.value!.emissions,
+                  currentTrip.value!.id!,
+                );
+                if (attributionSuccess) {
+                  debugPrint('✅ Successfully attributed emissions to organization');
+                } else {
+                  debugPrint('⚠️ Failed to attribute emissions to organization');
+                }
+              } catch (error) {
+                debugPrint('❌ Exception during emission attribution: $error');
+              }
             }
           }
           

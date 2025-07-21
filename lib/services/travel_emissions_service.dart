@@ -321,47 +321,78 @@ class TravelEmissionsService {
   /// Attribute trip emissions to organization's carbon footprint
   Future<bool> attributeEmissionsToOrganization(String organizationId, double emissions, String tripId) async {
     try {
+      debugPrint('🔄 Starting attribution: $emissions kg CO2e to organization $organizationId for trip $tripId');
+      
       if (!ConnectivityService.instance.isConnected) {
-        debugPrint('Offline - organization emissions attribution will be synced later');
+        debugPrint('❌ Offline - organization emissions attribution will be synced later');
         return false;
       }
       
+      debugPrint('🔍 Checking for existing organization carbon footprint record...');
       // Check if organization carbon footprint record exists
       final existingRecord = await _client
           .from('organization_carbon_footprint')
-          .select('id, travel_emissions')
+          .select('id, scope3_business_travel, scope3_total, total_emissions')
           .eq('organization_id', organizationId)
           .maybeSingle();
       
+      debugPrint('📊 Existing record found: ${existingRecord != null}');
+      
       if (existingRecord != null) {
         // Update existing record
-        final currentEmissions = double.parse(existingRecord['travel_emissions']?.toString() ?? '0');
-        final newTotalEmissions = currentEmissions + emissions;
+        final currentBusinessTravel = double.parse(existingRecord['scope3_business_travel']?.toString() ?? '0');
+        final currentScope3Total = double.parse(existingRecord['scope3_total']?.toString() ?? '0');
+        final currentTotalEmissions = double.parse(existingRecord['total_emissions']?.toString() ?? '0');
         
-        await _client
+        final newBusinessTravel = currentBusinessTravel + emissions;
+        final newScope3Total = currentScope3Total + emissions;
+        final newTotalEmissions = currentTotalEmissions + emissions;
+        
+        debugPrint('📈 Updating existing record:');
+        debugPrint('   Business Travel: $currentBusinessTravel + $emissions = $newBusinessTravel kg CO2e');
+        debugPrint('   Scope 3 Total: $currentScope3Total + $emissions = $newScope3Total kg CO2e');
+        debugPrint('   Total Emissions: $currentTotalEmissions + $emissions = $newTotalEmissions kg CO2e');
+        
+        final updateResult = await _client
             .from('organization_carbon_footprint')
             .update({
-              'travel_emissions': newTotalEmissions,
+              'scope3_business_travel': newBusinessTravel,
+              'scope3_total': newScope3Total,
+              'total_emissions': newTotalEmissions,
               'updated_at': DateTime.now().toIso8601String(),
             })
-            .eq('id', existingRecord['id']);
+            .eq('id', existingRecord['id'])
+            .select();
+            
+        debugPrint('✅ Update result: $updateResult');
       } else {
         // Create new record
-        await _client
+        debugPrint('🆕 Creating new organization carbon footprint record');
+        
+        final insertResult = await _client
             .from('organization_carbon_footprint')
             .insert({
               'organization_id': organizationId,
-              'travel_emissions': emissions,
-              'total_emissions': emissions, // Initialize with travel emissions
+              'year': DateTime.now().year,
+              'scope1_total': 0,
+              'scope2_total': 0,
+              'scope3_total': emissions,
+              'scope3_business_travel': emissions,
+              'total_emissions': emissions,
+              'unit': 'tCO2e',
               'created_at': DateTime.now().toIso8601String(),
               'updated_at': DateTime.now().toIso8601String(),
-            });
+            })
+            .select();
+            
+        debugPrint('✅ Insert result: $insertResult');
       }
       
-      debugPrint('Successfully attributed $emissions kg CO2e to organization $organizationId');
+      debugPrint('🎉 Successfully attributed $emissions kg CO2e to organization $organizationId');
       return true;
     } catch (e) {
-      debugPrint('Error attributing emissions to organization: $e');
+      debugPrint('❌ Error attributing emissions to organization: $e');
+      debugPrint('❌ Stack trace: ${StackTrace.current}');
       return false;
     }
   }
@@ -424,22 +455,31 @@ class TripData {
   }
   
   Map<String, dynamic> toJson() {
-    return {
-      // Only include ID if it's not a local or temp ID (these should not be sent to Supabase)
-      if (id != null && !id!.startsWith('local_') && !id!.startsWith('temp_')) 'id': id,
+    // Filter out temp IDs to prevent UUID errors in Supabase
+    final jsonMap = <String, dynamic>{
       'user_id': userId,
-      'start_time': startTime.toIso8601String(),
-      if (endTime != null) 'end_time': endTime!.toIso8601String(),
+      'start_time': startTime?.toIso8601String(),
+      'end_time': endTime?.toIso8601String(),
       'distance': distance,
       'mode': mode,
-      if (fuelType != null) 'fuel_type': fuelType,
       'emissions': emissions,
-      if (startLocation != null) 'start_location': startLocation,
-      if (endLocation != null) 'end_location': endLocation,
+      'start_location': startLocation,
+      'end_location': endLocation,
       'is_active': isActive,
-      if (purpose != null) 'purpose': purpose,
-      if (organizationId != null) 'organization_id': organizationId,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'purpose': purpose,
+      'fuel_type': fuelType,
+      // Note: organizationId is excluded because travel_trips table doesn't have this column
+      // Organization attribution is handled separately via organization_carbon_footprint table
     };
+    
+    // Only include ID if it's not a temp ID
+    if (id != null && !id!.startsWith('temp_') && !id!.startsWith('local_')) {
+      jsonMap['id'] = id;
+    }
+    
+    return jsonMap;
   }
   
   /// Create a copy of this TripData with optional field updates
