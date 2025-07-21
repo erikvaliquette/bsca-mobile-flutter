@@ -9,12 +9,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/fuel_types.dart';
-import '../../models/organization_model.dart';
 import '../../providers/organization_provider.dart';
 import '../../services/connectivity_service.dart';
 import '../../services/location_service.dart';
 import '../../services/travel_emissions_service.dart';
-import '../../services/supabase/supabase_client.dart';
 import '../../widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
 
@@ -254,7 +252,94 @@ class TravelEmissionsScreen extends HookWidget {
                             // Handle organization attribution for business trips
                             String? selectedOrganizationId;
                             if (dialogPurpose == 'Business') {
-                              selectedOrganizationId = await _showOrganizationSelectionDialog(context);
+                              final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+                              final organizations = organizationProvider.organizations;
+                              
+                              if (organizations.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No organizations found. Business trip will be saved without organization attribution.'),
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                                selectedOrganizationId = null;
+                              } else if (organizations.length == 1) {
+                                // Only one organization, use it automatically
+                                selectedOrganizationId = organizations.first.id;
+                              } else {
+                                // Multiple organizations, show selection dialog
+                                selectedOrganizationId = await showDialog<String>(
+                                  context: context,
+                                  builder: (BuildContext dialogContext) {
+                                    return AlertDialog(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      title: Text(
+                                        'Select Organization',
+                                        style: TextStyle(
+                                          color: Theme.of(dialogContext).primaryColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      content: SizedBox(
+                                        width: double.maxFinite,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Text(
+                                              'Which organization should this business trip be attributed to?',
+                                              style: TextStyle(fontSize: 16),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            ListView.builder(
+                                              shrinkWrap: true,
+                                              itemCount: organizations.length,
+                                              itemBuilder: (context, index) {
+                                                final org = organizations[index];
+                                                return Card(
+                                                  margin: const EdgeInsets.only(bottom: 8),
+                                                  child: ListTile(
+                                                    leading: CircleAvatar(
+                                                      backgroundColor: Theme.of(dialogContext).primaryColor,
+                                                      child: Text(
+                                                        org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
+                                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                                      ),
+                                                    ),
+                                                    title: Text(
+                                                      org.name,
+                                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                                    ),
+                                                    subtitle: org.description != null
+                                                        ? Text(
+                                                            org.description!,
+                                                            maxLines: 2,
+                                                            overflow: TextOverflow.ellipsis,
+                                                          )
+                                                        : null,
+                                                    onTap: () {
+                                                      Navigator.of(dialogContext).pop(org.id);
+                                                    },
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.of(dialogContext).pop(null);
+                                          },
+                                          child: const Text('Cancel'),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              }
                             }
                             
                             // Update trip in database
@@ -281,6 +366,7 @@ class TravelEmissionsScreen extends HookWidget {
                                 trip.id!,
                               ).catchError((error) {
                                 debugPrint('Error attributing emissions to organization: $error');
+                                return false;
                               });
                             }
                             
@@ -634,100 +720,6 @@ class TravelEmissionsScreen extends HookWidget {
       }
     }
     
-    // Show organization selection dialog for business trips
-    Future<String?> _showOrganizationSelectionDialog(BuildContext context) async {
-      final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
-      final organizations = organizationProvider.organizations;
-      
-      if (organizations.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No organizations found. Business trip will be saved without organization attribution.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        return null;
-      }
-      
-      if (organizations.length == 1) {
-        // Only one organization, use it automatically
-        return organizations.first.id;
-      }
-      
-      // Multiple organizations, show selection dialog
-      return showDialog<String>(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text(
-              'Select Organization',
-              style: TextStyle(
-                color: Theme.of(context).primaryColor,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Which organization should this business trip be attributed to?',
-                    style: TextStyle(fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: organizations.length,
-                    itemBuilder: (context, index) {
-                      final org = organizations[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).primaryColor,
-                            child: Text(
-                              org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          title: Text(
-                            org.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: org.description != null
-                              ? Text(
-                                  org.description!,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                )
-                              : null,
-                          onTap: () {
-                            Navigator.of(context).pop(org.id);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(null);
-                },
-                child: const Text('Cancel'),
-              ),
-            ],
-          );
-        },
-      );
-    }
-    
     // Stop tracking
     Future<void> stopTracking() async {
       isLoading.value = true;
@@ -785,7 +777,94 @@ class TravelEmissionsScreen extends HookWidget {
           // Handle organization attribution for business trips
           String? selectedOrganizationId;
           if (currentTrip.value!.purpose == 'Business') {
-            selectedOrganizationId = await _showOrganizationSelectionDialog(context);
+            final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+            final organizations = organizationProvider.organizations;
+            
+            if (organizations.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('No organizations found. Business trip will be saved without organization attribution.'),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+              selectedOrganizationId = null;
+            } else if (organizations.length == 1) {
+              // Only one organization, use it automatically
+              selectedOrganizationId = organizations.first.id;
+            } else {
+              // Multiple organizations, show selection dialog
+              selectedOrganizationId = await showDialog<String>(
+                context: context,
+                builder: (BuildContext dialogContext) {
+                  return AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: Text(
+                      'Select Organization',
+                      style: TextStyle(
+                        color: Theme.of(dialogContext).primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    content: SizedBox(
+                      width: double.maxFinite,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Which organization should this business trip be attributed to?',
+                            style: TextStyle(fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: organizations.length,
+                            itemBuilder: (context, index) {
+                              final org = organizations[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Theme.of(dialogContext).primaryColor,
+                                    child: Text(
+                                      org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    org.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: org.description != null
+                                      ? Text(
+                                          org.description!,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        )
+                                      : null,
+                                  onTap: () {
+                                    Navigator.of(dialogContext).pop(org.id);
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop(null);
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            }
           }
           
           // Handle temporary trips that need to be saved to database
@@ -812,6 +891,7 @@ class TravelEmissionsScreen extends HookWidget {
                   savedTrip.id!,
                 ).catchError((error) {
                   debugPrint('Error attributing emissions to organization: $error');
+                  return false;
                 });
               }
             }
@@ -840,6 +920,7 @@ class TravelEmissionsScreen extends HookWidget {
                 currentTrip.value!.id!,
               ).catchError((error) {
                 debugPrint('Error attributing emissions to organization: $error');
+                return false;
               });
             }
           }
@@ -851,6 +932,7 @@ class TravelEmissionsScreen extends HookWidget {
             ).catchError((error) {
               debugPrint('Error syncing location points: $error');
               // Continue even if sync fails - points will be synced later
+              return false;
             });
           }
           

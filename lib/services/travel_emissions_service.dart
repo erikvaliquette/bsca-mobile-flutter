@@ -425,8 +425,8 @@ class TripData {
   
   Map<String, dynamic> toJson() {
     return {
-      // Only include ID if it's not a local ID (local IDs should not be sent to Supabase)
-      if (id != null && !id!.startsWith('local_')) 'id': id,
+      // Only include ID if it's not a local or temp ID (these should not be sent to Supabase)
+      if (id != null && !id!.startsWith('local_') && !id!.startsWith('temp_')) 'id': id,
       'user_id': userId,
       'start_time': startTime.toIso8601String(),
       if (endTime != null) 'end_time': endTime!.toIso8601String(),

@@ -278,6 +278,23 @@ class LocalStorageService {
     }
   }
   
+  /// Get unsynced location points for a specific trip
+  List<LocalLocationPoint> getUnsyncedLocationPointsForTrip(String tripId) {
+    try {
+      if (_locationsBox == null) {
+        throw Exception('Locations box not initialized');
+      }
+      
+      return _locationsBox!.values
+          .where((point) => point.tripId == tripId && !point.isSynced)
+          .toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    } catch (e) {
+      debugPrint('Error getting unsynced location points for trip from local storage: $e');
+      return [];
+    }
+  }
+  
   /// Mark a location point as synced
   Future<bool> markLocationPointSynced(String pointId) async {
     try {
