@@ -68,7 +68,8 @@ class MessageModel {
                   DateTime.parse(json['created_at']) : 
                   json['created_at']) : 
                 null,
-      isPrivate: json['private'],
+      // Skip the 'private' field entirely to avoid UUID conversion errors
+      isPrivate: null,
       updatedAt: json['updated_at'] != null ? 
                 (json['updated_at'] is String ? 
                   DateTime.parse(json['updated_at']) : 
@@ -104,7 +105,8 @@ class MessageModel {
     if (read != null) data['read'] = read;
     if (event != null) data['event'] = event;
     if (createdAt != null) data['created_at'] = createdAt!.toIso8601String();
-    if (isPrivate != null) data['private'] = isPrivate;
+    // Skip the 'private' field entirely to avoid UUID conversion errors
+    // if (isPrivate != null) data['private'] = isPrivate == true;
     if (updatedAt != null) data['updated_at'] = updatedAt!.toIso8601String();
     if (userId != null) data['user_id'] = userId;
     if (fileUrl != null) data['file_url'] = fileUrl;

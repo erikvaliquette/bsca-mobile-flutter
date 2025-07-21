@@ -42,16 +42,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
       debugPrint('ChatListScreen: Refreshing chat rooms and subscriptions');
       // Force a refresh of chat rooms to get the latest messages
       await messageProvider.refreshChatRooms();
-      // Test realtime subscriptions to ensure they're working
-      await messageProvider.testRealtimeSubscriptions();
+      // Ensure realtime subscriptions are active
+      messageProvider.refreshMessageSubscriptions();
       return;
     }
     
     debugPrint('ChatListScreen: First time initialization');
     // First time initialization
     await messageProvider.initialize();
-    // Test realtime subscriptions to ensure they're working
-    await messageProvider.testRealtimeSubscriptions();
+    // Ensure realtime subscriptions are active
+    messageProvider.refreshMessageSubscriptions();
     setState(() {
       _isInitialized = true;
     });

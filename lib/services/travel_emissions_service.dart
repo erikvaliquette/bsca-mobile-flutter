@@ -213,32 +213,10 @@ class TravelEmissionsService {
   /// Add a location point to a trip
   Future<bool> addLocationPoint(LocationPoint point) async {
     try {
-      // Save to local storage first
+      // Only save to local storage during tracking
+      // Location points will be synced to Supabase when the trip is completed
       final localPoint = LocalLocationPoint.fromLocationPoint(point, isSynced: false);
       final savedPoint = await LocalStorageService.instance.saveLocationPoint(localPoint);
-      
-      // If online, try to sync with Supabase
-      if (ConnectivityService.instance.isConnected) {
-        try {
-          await _client
-              .from('location_points')
-              .insert(point.toJson());
-          
-          // Mark as synced in local storage
-          if (savedPoint != null) {
-            await LocalStorageService.instance.markLocationPointSynced(savedPoint.id);
-          }
-          
-          // Invalidate location points cache for this trip
-          _locationPointCache.remove(point.tripId);
-          
-          return true;
-        } catch (e) {
-          debugPrint('Error adding location point to Supabase: $e');
-          // Schedule sync for later
-          SyncService.instance.syncData();
-        }
-      }
       
       // Invalidate location points cache for this trip
       _locationPointCache.remove(point.tripId);
@@ -300,6 +278,46 @@ class TravelEmissionsService {
       return [];
     }
   }
+  
+  /// Batch sync location points for a trip to Supabase
+  Future<bool> syncTripLocationPoints(String tripId) async {
+    try {
+      if (!ConnectivityService.instance.isConnected) {
+        return false;
+      }
+      
+      // Get unsynced location points for this trip
+      final unsyncedPoints = LocalStorageService.instance.getTripLocationPoints(tripId)
+          .where((point) => !point.isSynced)
+          .toList();
+      
+      if (unsyncedPoints.isEmpty) {
+        return true; // Nothing to sync
+      }
+      
+      // Convert to JSON and batch insert
+      final pointsJson = unsyncedPoints
+          .map((localPoint) => localPoint.toLocationPoint().toJson())
+          .toList();
+      
+      await _client
+          .from('travel_locations')
+          .insert(pointsJson);
+      
+      // Mark all points as synced
+      await Future.wait(
+        unsyncedPoints.map((point) => 
+          LocalStorageService.instance.markLocationPointSynced(point.id)
+        )
+      );
+      
+      debugPrint('Synced ${unsyncedPoints.length} location points for trip $tripId');
+      return true;
+    } catch (e) {
+      debugPrint('Error syncing location points for trip $tripId: $e');
+      return false;
+    }
+  }
 }
 
 /// Data model for a travel trip
@@ -357,7 +375,8 @@ class TripData {
   
   Map<String, dynamic> toJson() {
     return {
-      if (id != null) 'id': id,
+      // Only include ID if it's not a local ID (local IDs should not be sent to Supabase)
+      if (id != null && !id!.startsWith('local_')) 'id': id,
       'user_id': userId,
       'start_time': startTime.toIso8601String(),
       if (endTime != null) 'end_time': endTime!.toIso8601String(),

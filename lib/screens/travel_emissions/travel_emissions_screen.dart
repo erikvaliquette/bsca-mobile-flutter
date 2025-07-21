@@ -629,6 +629,14 @@ class TravelEmissionsScreen extends HookWidget {
             updates,
           );
           
+          // Batch sync location points for this trip
+          TravelEmissionsService.instance.syncTripLocationPoints(
+            currentTrip.value!.id!,
+          ).catchError((error) {
+            debugPrint('Error syncing location points: $error');
+            // Continue even if sync fails - points will be synced later
+          });
+          
           // Add trip to list
           final updatedTrip = TripData(
             id: currentTrip.value!.id,

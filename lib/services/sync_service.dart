@@ -91,14 +91,12 @@ class SyncService {
         }
       }
       
-      // Sync unsynced location points
+      // Sync unsynced location points by trip
       final unsyncedPoints = _localStorageService.getUnsyncedLocationPoints();
-      for (final localPoint in unsyncedPoints) {
-        final locationPoint = localPoint.toLocationPoint();
-        final success = await _travelEmissionsService.addLocationPoint(locationPoint);
-        if (success) {
-          await _localStorageService.markLocationPointSynced(localPoint.id);
-        }
+      final tripIds = unsyncedPoints.map((point) => point.tripId).toSet();
+      
+      for (final tripId in tripIds) {
+        await _travelEmissionsService.syncTripLocationPoints(tripId);
       }
       
       debugPrint('Data sync completed');

@@ -48,7 +48,7 @@ class LocalTripData {
   final bool isSynced;
 
   LocalTripData({
-    String? id,
+    required this.id,
     required this.userId,
     required this.startTime,
     this.endTime,
@@ -61,7 +61,7 @@ class LocalTripData {
     required this.isActive,
     this.purpose,
     this.isSynced = false,
-  }) : id = id ?? const Uuid().v4();
+  });
 
   /// Convert to TripData model
   TripData toTripData() {
@@ -84,7 +84,7 @@ class LocalTripData {
   /// Create from TripData model
   factory LocalTripData.fromTripData(TripData tripData, {bool isSynced = true}) {
     return LocalTripData(
-      id: tripData.id,
+      id: tripData.id ?? 'local_${const Uuid().v4()}',
       userId: tripData.userId,
       startTime: tripData.startTime,
       endTime: tripData.endTime,

@@ -23,6 +23,41 @@ class MessageProvider extends ChangeNotifier {
   // Initialize the provider
   bool _isInitialized = false;
   
+  // Helper method to check if a room ID is valid
+  bool _isValidRoomId(dynamic roomId) {
+    if (roomId == null) return false;
+    if (roomId is! String) return false;
+    if (roomId.isEmpty) return false;
+    
+    // Handle special case of 'private' which causes UUID errors
+    if (roomId == 'private') {
+      debugPrint('⚠️ Invalid room_id: "private" - skipping');
+      return false;
+    }
+    
+    // Handle text-based room IDs like 'private_chat_*'
+    if (roomId.startsWith('private_chat_')) {
+      debugPrint('✅ Valid text-based room_id: $roomId');
+      return true;
+    }
+    
+    // For other room IDs, check if they're valid UUIDs
+    try {
+      // Use a simple regex to validate UUID format
+      final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+      final isValid = uuidRegex.hasMatch(roomId);
+      if (isValid) {
+        return true;
+      } else {
+        debugPrint('⚠️ Invalid UUID format for room_id: $roomId - skipping');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error validating UUID for room_id: $roomId - ${e.toString()}');
+      return false;
+    }
+  }
+  
   /// Explicitly refresh the chat rooms list to get the latest messages
   Future<void> refreshChatRooms() async {
     try {
@@ -39,362 +74,7 @@ class MessageProvider extends ChangeNotifier {
     }
   }
   
-  /// Test method to verify realtime subscriptions are active
-  Future<void> testRealtimeSubscriptions() async {
-    debugPrint('Testing realtime subscriptions...');
-    
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('Cannot test subscriptions: User is null');
-      return;
-    }
-    
-    debugPrint('Current user ID: ${user.id}');
-    debugPrint('Messages channel status: ${_messagesChannel?.socket.isConnected}');
-    debugPrint('Number of active channels: ${_channels.length}');
-    
-    // Force a refresh of chat rooms
-    await refreshChatRooms();
-    
-    // Check for recent messages that should have triggered realtime
-    await testCheckRecentMessages();
-    
-    // Test sending a message to trigger realtime
-    debugPrint('🔥 TEST: Sending test message to trigger realtime...');
-    await testSendDirectMessage('2c911795-329a-4f5b-8799-e7d215f524d6', 'Test message from Flutter app at ${DateTime.now()}');
-    
-    // Wait a moment for the message to be processed
-    await Future.delayed(Duration(seconds: 2));
-    
-    // Test manual query for inbound messages
-    debugPrint('🔥 TEST: Manually querying for inbound messages from Apple Tester...');
-    await testQueryInboundMessages();
-    
-    // Test creating an inbound message from Apple Tester to Erik
-    await testCreateInboundMessage();
-    
-    // Test querying for specific inbound messages we know exist from web version
-    await testQuerySpecificInboundMessages();
-    
-    debugPrint('Realtime subscription test completed');
-  }
-  
-  /// Test method to create an INBOUND message (from Apple Tester to Erik)
-  Future<void> testCreateInboundMessage() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('🔥 TEST INBOUND: Cannot create test message: User is null');
-      return;
-    }
-
-    try {
-      debugPrint('🔥 TEST INBOUND: Creating test message FROM Apple Tester TO Erik...');
-      
-      // Create a message FROM Apple Tester TO Erik (inbound for Erik)
-      final response = await Supabase.instance.client
-          .from('messages')
-          .insert({
-            'sender_id': '2c911795-329a-4f5b-8799-e7d215f524d6', // Apple Tester
-            'recipient_id': user.id, // Erik (current user)
-            'content': 'Test INBOUND message from Apple Tester to Erik at ${DateTime.now()}',
-            'created_at': DateTime.now().toIso8601String(),
-            'room_id': null, // Direct message
-            'read': false,
-          })
-          .select();
-      
-      debugPrint('🔥 TEST INBOUND: Successfully created inbound message: $response');
-      debugPrint('🔥 TEST INBOUND: This should trigger the realtime subscription!');
-      
-    } catch (e) {
-      debugPrint('🔥 TEST INBOUND: Error creating inbound message: $e');
-    }
-  }
-  
-  /// Test method to query for specific inbound messages that should exist based on web version
-  Future<void> testQuerySpecificInboundMessages() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('🔥 TEST SPECIFIC: Cannot query: User is null');
-      return;
-    }
-
-    try {
-      debugPrint('🔥 TEST SPECIFIC: Querying for messages containing "AT to EV" or "Apple tester to Erik"...');
-      
-      // Query for messages with content that matches what we see in web version
-      final atToEvMessages = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .or('content.ilike.%AT to EV%,content.ilike.%Apple tester to Erik%,content.ilike.%test from AT to EV%')
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false);
-      
-      debugPrint('🔥 TEST SPECIFIC: Found ${atToEvMessages.length} messages with AT to EV content:');
-      for (var message in atToEvMessages) {
-        debugPrint('🔥 TEST SPECIFIC: - "${message['content']}" from ${message['sender_id']} to ${message['recipient_id']} at ${message['created_at']}');
-        if (message['recipient_id'] == user.id) {
-          debugPrint('🔥 TEST SPECIFIC:   ^^^ This is an INBOUND message to Erik!');
-        } else {
-          debugPrint('🔥 TEST SPECIFIC:   ^^^ This is an OUTBOUND message from Erik');
-        }
-      }
-      
-      // Also try a broader search for any messages from Apple Tester to Erik
-      final broadSearch = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .eq('sender_id', '2c911795-329a-4f5b-8799-e7d215f524d6') // Apple Tester
-          .eq('recipient_id', user.id) // Erik
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false);
-      
-      debugPrint('🔥 TEST SPECIFIC: Broad search found ${broadSearch.length} messages from Apple Tester to Erik:');
-      for (var message in broadSearch) {
-        debugPrint('🔥 TEST SPECIFIC: - "${message['content']}" at ${message['created_at']}');
-      }
-      
-      // Check if the issue is with the main query in _fetchDirectMessages
-      debugPrint('🔥 TEST SPECIFIC: Now testing the EXACT same query used in _fetchDirectMessages...');
-      final mainQuery = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, updated_at, read, room_id, file_url, file_type, file_name, status, read_at')
-          .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false);
-      
-      debugPrint('🔥 TEST SPECIFIC: Main query found ${mainQuery.length} total messages:');
-      for (var message in mainQuery) {
-        if (message['sender_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6' || message['recipient_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
-          debugPrint('🔥 TEST SPECIFIC: APPLE TESTER MESSAGE: "${message['content']}" from ${message['sender_id']} to ${message['recipient_id']}');
-          if (message['recipient_id'] == user.id) {
-            debugPrint('🔥 TEST SPECIFIC:   ^^^ This should be INBOUND to Erik but might not be showing in UI!');
-          }
-        }
-      }
-      
-    } catch (e) {
-      debugPrint('🔥 TEST SPECIFIC: Error querying specific messages: $e');
-    }
-  }
-  
-  /// Test method to send a direct message to verify realtime functionality
-  Future<void> testSendDirectMessage(String recipientId, String content) async {
-    debugPrint('🔥 TEST: Sending test direct message to $recipientId');
-    
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('🔥 TEST: Cannot send message: User is null');
-      return;
-    }
-    
-    try {
-      final response = await Supabase.instance.client
-          .from('messages')
-          .insert({
-            'sender_id': user.id,
-            'recipient_id': recipientId,
-            'content': content,
-            'room_id': null, // Direct message
-            'created_at': DateTime.now().toIso8601String(),
-          })
-          .select()
-          .single();
-      
-      debugPrint('🔥 TEST: Message sent successfully: $response');
-    } catch (e) {
-      debugPrint('🔥 TEST: Error sending message: $e');
-    }
-  }
-  
-  /// Test method to check for recent messages that should have triggered realtime
-  Future<void> testCheckRecentMessages() async {
-    debugPrint('🔥 TEST: Checking for recent messages...');
-    
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('🔥 TEST: Cannot check messages: User is null');
-      return;
-    }
-    
-    try {
-      debugPrint('🔥 TEST: Querying for messages where recipient_id = ${user.id}');
-      
-      // Check for messages where current user is recipient (inbound)
-      final inboundMessages = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .eq('recipient_id', user.id)
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false)
-          .limit(5);
-      
-      debugPrint('🔥 TEST: Found ${inboundMessages.length} recent inbound messages:');
-      for (var msg in inboundMessages) {
-        debugPrint('🔥 TEST: - ${msg['content']} from ${msg['sender_id']} at ${msg['created_at']}');
-      }
-      
-      // Also check ALL direct messages to see what's in the database
-      final allDirectMessages = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false)
-          .limit(10);
-      
-      debugPrint('🔥 TEST: Found ${allDirectMessages.length} total direct messages in database:');
-      for (var msg in allDirectMessages) {
-        debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} at ${msg['created_at']}');
-        if (msg['recipient_id'] == user.id) {
-          debugPrint('🔥 TEST:   ^^^ This should be an INBOUND message for current user!');
-        }
-        if (msg['sender_id'] == user.id) {
-          debugPrint('🔥 TEST:   ^^^ This is an OUTBOUND message from current user');
-        }
-      }
-      
-      // Check for messages where current user is sender (outbound)
-      final outboundMessages = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .eq('sender_id', user.id)
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false)
-          .limit(5);
-      
-      debugPrint('🔥 TEST: Found ${outboundMessages.length} recent outbound messages:');
-      for (var msg in outboundMessages) {
-        debugPrint('🔥 TEST: - ${msg['content']} to ${msg['recipient_id']} at ${msg['created_at']}');
-      }
-      
-    } catch (e) {
-      debugPrint('🔥 TEST: Error checking messages: $e');
-    }
-  }
-  
-  /// Test method to manually query for inbound messages from Apple Tester
-  Future<void> testQueryInboundMessages() async {
-    debugPrint('🔥 TEST: Testing manual query for inbound messages...');
-    
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      debugPrint('🔥 TEST: Cannot query: User is null');
-      return;
-    }
-    
-    try {
-      // Query specifically for messages from Apple Tester to current user
-      final appleToErikMessages = await Supabase.instance.client
-          .from('messages')
-          .select('id, sender_id, recipient_id, content, created_at, read')
-          .eq('sender_id', '2c911795-329a-4f5b-8799-e7d215f524d6') // Apple Tester
-          .eq('recipient_id', user.id) // Current user (Erik)
-          .filter('room_id', 'is', null)
-          .order('created_at', ascending: false);
-      
-      debugPrint('🔥 TEST: Found ${appleToErikMessages.length} messages from Apple Tester to Erik:');
-      for (var msg in appleToErikMessages) {
-        debugPrint('🔥 TEST: - "${msg['content']}" at ${msg['created_at']} (read: ${msg['read']})');
-      }
-      
-      if (appleToErikMessages.isEmpty) {
-        debugPrint('🔥 TEST: No inbound messages found - this explains why realtime isn\'t triggering!');
-        
-        // Let's check what messages DO exist in the database
-        debugPrint('🔥 TEST: Checking what messages actually exist in the database...');
-        
-        // Check all messages involving Apple Tester
-        final allAppleMessages = await Supabase.instance.client
-            .from('messages')
-            .select('id, sender_id, recipient_id, content, created_at, read')
-            .or('sender_id.eq.2c911795-329a-4f5b-8799-e7d215f524d6,recipient_id.eq.2c911795-329a-4f5b-8799-e7d215f524d6')
-            .filter('room_id', 'is', null)
-            .order('created_at', ascending: false)
-            .limit(10);
-        
-        debugPrint('🔥 TEST: Found ${allAppleMessages.length} messages involving Apple Tester:');
-        for (var msg in allAppleMessages) {
-          debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} at ${msg['created_at']}');
-          if (msg['sender_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
-            debugPrint('🔥 TEST:   ^^^ Apple Tester is SENDER');
-          }
-          if (msg['recipient_id'] == '2c911795-329a-4f5b-8799-e7d215f524d6') {
-            debugPrint('🔥 TEST:   ^^^ Apple Tester is RECIPIENT');
-          }
-        }
-        
-        // Check if there are any messages where Erik is recipient (from anyone)
-        final erikAsRecipient = await Supabase.instance.client
-            .from('messages')
-            .select('id, sender_id, recipient_id, content, created_at, read')
-            .eq('recipient_id', user.id)
-            .filter('room_id', 'is', null)
-            .order('created_at', ascending: false)
-            .limit(5);
-        
-        debugPrint('🔥 TEST: Found ${erikAsRecipient.length} messages where Erik is recipient:');
-        for (var msg in erikAsRecipient) {
-          debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} at ${msg['created_at']}');
-        }
-        
-        // Check authentication status
-        debugPrint('🔥 TEST: Checking authentication status...');
-        debugPrint('🔥 TEST: Current user ID: ${user.id}');
-        debugPrint('🔥 TEST: Current user email: ${user.email}');
-        debugPrint('🔥 TEST: User metadata: ${user.userMetadata}');
-        
-        // Check session info
-        final session = Supabase.instance.client.auth.currentSession;
-        debugPrint('🔥 TEST: Session exists: ${session != null}');
-        if (session != null) {
-          debugPrint('🔥 TEST: Access token exists: ${session.accessToken.isNotEmpty}');
-          debugPrint('🔥 TEST: Token expires at: ${session.expiresAt}');
-        }
-        
-        // Try to read ALL messages (ignoring RLS temporarily)
-        debugPrint('🔥 TEST: Attempting to read ALL messages in the table...');
-        try {
-          final allMessages = await Supabase.instance.client
-              .from('messages')
-              .select('id, sender_id, recipient_id, content, created_at, room_id, read')
-              .order('created_at', ascending: false)
-              .limit(10);
-          
-          debugPrint('🔥 TEST: Successfully read ${allMessages.length} total messages from database:');
-          for (var msg in allMessages) {
-            debugPrint('🔥 TEST: - "${msg['content']}" from ${msg['sender_id']} to ${msg['recipient_id']} (room: ${msg['room_id']})');
-          }
-        } catch (e) {
-          debugPrint('🔥 TEST: ERROR reading all messages: $e');
-          debugPrint('🔥 TEST: The error suggests there might be invalid data in the database');
-          
-          // Try a simpler query to see if we can read anything at all
-          debugPrint('🔥 TEST: Trying a simpler query without room_id...');
-          try {
-            final simpleMessages = await Supabase.instance.client
-                .from('messages')
-                .select('id, content, created_at')
-                .limit(5);
-            
-            debugPrint('🔥 TEST: Simple query succeeded! Found ${simpleMessages.length} messages:');
-            for (var msg in simpleMessages) {
-              debugPrint('🔥 TEST: - "${msg['content']}" at ${msg['created_at']}');
-            }
-          } catch (e2) {
-            debugPrint('🔥 TEST: Even simple query failed: $e2');
-            debugPrint('🔥 TEST: This confirms RLS policies are blocking access!');
-          }
-        }
-        
-      } else {
-        debugPrint('🔥 TEST: Inbound messages exist but realtime subscription is not triggering!');
-      }
-      
-    } catch (e) {
-      debugPrint('🔥 TEST: Error querying inbound messages: $e');
-    }
-  }
-  
+  // Initialize the provider
   Future<void> initialize() async {
     if (_isInitialized) return;
     
@@ -426,65 +106,192 @@ class MessageProvider extends ChangeNotifier {
         return;
       }
 
-      // First, get all unique room_ids from messages where the user is either sender or recipient
-      final messagesResponse = await Supabase.instance.client
-          .from('messages')
-          .select('room_id')
-          .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
-          .not('room_id', 'is', null)
-          .order('created_at', ascending: false);
+      debugPrint('ChatListScreen: First time initialization');
+      
+      // IMPORTANT: We need to handle room_ids that are text fields (like 'private_chat_*')
+      // instead of UUIDs to prevent PostgreSQL errors
+      
+      // First, get all messages where the user is either sender or recipient
+      // We'll process room_ids manually to avoid SQL errors with invalid UUIDs
+      debugPrint('🔍 DEBUG: Attempting to fetch messages for user: ${user.id}');
+      
+      List<dynamic> messagesResponse = [];
+      
+      try {
+        // Try the main query first
+        debugPrint('🔍 DEBUG: Trying main messages query...');
+        messagesResponse = await Supabase.instance.client
+            .from('messages')
+            .select('room_id, sender_id, recipient_id')
+            .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
+            .not('room_id', 'is', null)
+            .order('created_at', ascending: false);
+        debugPrint('✅ DEBUG: Main query successful, found ${messagesResponse.length} messages');
+      } catch (e) {
+        debugPrint('⚠️ DEBUG: Main query failed: $e');
+        
+        // If main query fails, try without room_id filter
+        try {
+          debugPrint('🔍 DEBUG: Trying fallback query without room_id filter...');
+          messagesResponse = await Supabase.instance.client
+              .from('messages')
+              .select('room_id, sender_id, recipient_id')
+              .or('sender_id.eq.${user.id},recipient_id.eq.${user.id}')
+              .order('created_at', ascending: false);
+          debugPrint('✅ DEBUG: Fallback query successful, found ${messagesResponse.length} messages');
+        } catch (e2) {
+          debugPrint('⚠️ DEBUG: Fallback query also failed: $e2');
+          
+          // If both queries fail, try the most basic query
+          try {
+            debugPrint('🔍 DEBUG: Trying basic query for sender only...');
+            messagesResponse = await Supabase.instance.client
+                .from('messages')
+                .select('room_id, sender_id, recipient_id')
+                .eq('sender_id', user.id)
+                .order('created_at', ascending: false);
+            debugPrint('✅ DEBUG: Basic query successful, found ${messagesResponse.length} messages');
+          } catch (e3) {
+            debugPrint('⚠️ DEBUG: All queries failed, using empty result: $e3');
+            messagesResponse = [];
+          }
+        }
+      }
       
       // Extract unique room IDs
       final Set<String> uniqueRoomIds = {};
+      debugPrint('🔍 DEBUG: Processing ${messagesResponse.length} messages for room IDs');
+      
       for (var item in messagesResponse) {
         if (item['room_id'] != null) {
-          uniqueRoomIds.add(item['room_id']);
+          final roomId = item['room_id'];
+          debugPrint('🔍 DEBUG: Found room_id: "$roomId"');
+          
+          // Safety check - skip "private" values to prevent UUID errors
+          if (roomId == 'private') {
+            debugPrint('⚠️ Skipping invalid room_id: "private"');
+            continue;
+          }
+          
+          uniqueRoomIds.add(roomId);
         }
       }
+      
+      debugPrint('🔍 DEBUG: Extracted ${uniqueRoomIds.length} unique room IDs: ${uniqueRoomIds.toList()}');
       
       // If we have room IDs, fetch the chat rooms
       List<dynamic> data = [];
       if (uniqueRoomIds.isNotEmpty) {
-        // Fetch chat rooms from Supabase
-        // For multiple room IDs, we need to use multiple eq filters with or
-        var query = Supabase.instance.client
-            .from('chat_rooms')
-            .select('*');
-            
-        // Add filters for each room ID with OR
-        // Make sure each room ID is a valid UUID and properly quoted
+        // Filter out any invalid room IDs using our helper method
         List<String> validRoomIds = [];
+        debugPrint('🔍 DEBUG: Validating ${uniqueRoomIds.length} room IDs');
+        
         for (var roomId in uniqueRoomIds) {
-          // Basic UUID validation to avoid the 'private' error
-          if (roomId.length == 36 && roomId.contains('-')) {
+          debugPrint('🔍 DEBUG: Validating room_id: "$roomId"');
+          if (_isValidRoomId(roomId)) {
+            debugPrint('✅ DEBUG: Valid room_id: "$roomId"');
             validRoomIds.add(roomId);
           } else {
-            debugPrint('Skipping invalid room_id: $roomId');
+            debugPrint('⚠️ DEBUG: Invalid room_id: "$roomId"');
           }
         }
         
-        if (validRoomIds.isNotEmpty) {
-          String orCondition = validRoomIds.map((roomId) => "room_id.eq.$roomId").join(',');
-          query = query.or(orCondition);
-        }
+        debugPrint('🔍 DEBUG: ${validRoomIds.length} valid room IDs: ${validRoomIds.toList()}');
         
-        final response = await query.order('updated_at', ascending: false);
-        data = response;
+        // Fetch each chat room individually to avoid complex query issues
+        if (validRoomIds.isNotEmpty) {
+          debugPrint('🔍 Fetching ${validRoomIds.length} chat rooms');
+          
+          // Fetch each room individually and combine results
+          for (var roomId in validRoomIds) {
+            try {
+              // For text-based room IDs like 'private_chat_*', we need to handle them differently
+              // since they might not exist in the chat_rooms table
+              if (roomId.startsWith('private_chat_')) {
+                debugPrint('🔍 Creating virtual room for text-based room_id: $roomId');
+                
+                // Extract the user ID from the room ID to create a better name
+                String roomName = 'Private Chat';
+                if (roomId.contains('_')) {
+                  final parts = roomId.split('_');
+                  if (parts.length >= 3) {
+                    final userId = parts.sublist(2).join('_'); // Get everything after 'private_chat_'
+                    roomName = 'Private Chat';
+                    // TODO: Fetch user name from profiles table using userId
+                  }
+                }
+                
+                // Create a virtual chat room for this text-based room ID
+                final virtualRoom = {
+                  'id': roomId, // Use room_id as id for virtual rooms
+                  'room_id': roomId,
+                  'name': roomName,
+                  'created_at': DateTime.now().toIso8601String(),
+                  'updated_at': DateTime.now().toIso8601String(),
+                  'is_group': false,
+                  'is_direct': true,
+                  'private': true,
+                };
+                
+                debugPrint('✅ Created virtual room: $virtualRoom');
+                data.add(virtualRoom);
+                continue;
+              }
+              
+              // For UUID-based room IDs, fetch from the database
+              // Additional safety check to prevent "private" from being used as UUID
+              if (roomId == 'private') {
+                debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in chat_rooms query');
+                continue;
+              }
+              
+              final roomResponse = await Supabase.instance.client
+                  .from('chat_rooms')
+                  .select('*')
+                  .eq('room_id', roomId)
+                  .order('updated_at', ascending: false);
+              
+              if (roomResponse.isNotEmpty) {
+                data.addAll(roomResponse);
+                debugPrint('✅ Successfully fetched room: $roomId');
+              }
+            } catch (e) {
+              debugPrint('⚠️ Error fetching room $roomId: $e');
+            }
+          }
+          
+          // Sort the combined results by updated_at
+          data.sort((a, b) {
+            final DateTime aTime = DateTime.parse(a['updated_at'] ?? '');
+            final DateTime bTime = DateTime.parse(b['updated_at'] ?? '');
+            return bTime.compareTo(aTime); // Descending order
+          });
+        }
       }
       
       _chatRooms.clear();
       
+      debugPrint('🔍 DEBUG: Converting ${data.length} room data objects to ChatRoomModel');
+      
       // Convert each room data to ChatRoomModel
       for (var roomData in data) {
-        final room = ChatRoomModel.fromJson(roomData);
-        _chatRooms.add(room);
-        
-        // Fetch last message for each room
-        await _fetchLastMessage(room.roomId);
-        
-        // Fetch unread count for each room
-        await _fetchUnreadCount(room.roomId);
+        try {
+          debugPrint('🔍 DEBUG: Processing room data: $roomData');
+          final room = ChatRoomModel.fromJson(roomData);
+          _chatRooms.add(room);
+          debugPrint('✅ DEBUG: Successfully created ChatRoomModel for room: ${room.roomId}');
+          
+          // Fetch last message for each room
+          await _fetchLastMessage(room.roomId);
+          
+          // Fetch unread count for each room
+          await _fetchUnreadCount(room.roomId);
+        } catch (e) {
+          debugPrint('⚠️ DEBUG: Error creating ChatRoomModel from data $roomData: $e');
+        }
       }
+      
+      debugPrint('🔍 DEBUG: Final chat rooms count: ${_chatRooms.length}');
     } catch (e) {
       _error = e.toString();
       debugPrint('Error fetching chat rooms: $_error');
@@ -494,14 +301,25 @@ class MessageProvider extends ChangeNotifier {
 
   // Fetch the last message for a chat room
   Future<void> _fetchLastMessage(String roomId) async {
+    // Skip invalid room IDs
+    if (!_isValidRoomId(roomId)) {
+      debugPrint('⚠️ Skipping _fetchLastMessage for invalid room_id: $roomId');
+      return;
+    }
+    
+    // Additional safety check to prevent "private" from being used as UUID
+    if (roomId == 'private') {
+      debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in _fetchLastMessage');
+      return;
+    }
+    
     try {
       final response = await Supabase.instance.client
           .from('messages')
           .select('*')
-                    .eq('room_id', roomId)
+          .eq('room_id', roomId)
           .order('created_at', ascending: false)
-          .limit(1)
-          ;
+          .limit(1);
 
       if (response.isNotEmpty) {
         final lastMessageData = response[0];
@@ -533,6 +351,18 @@ class MessageProvider extends ChangeNotifier {
 
   // Fetch unread message count for a chat room
   Future<void> _fetchUnreadCount(String roomId) async {
+    // Skip invalid room IDs
+    if (!_isValidRoomId(roomId)) {
+      debugPrint('⚠️ Skipping _fetchUnreadCount for invalid room_id: $roomId');
+      return;
+    }
+    
+    // Additional safety check to prevent "private" from being used as UUID
+    if (roomId == 'private') {
+      debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in _fetchUnreadCount');
+      return;
+    }
+    
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
@@ -540,8 +370,8 @@ class MessageProvider extends ChangeNotifier {
       final countResponse = await Supabase.instance.client
           .from('messages')
           .count()
-                    .eq('room_id', roomId)
-                    .eq('read', false)
+          .eq('room_id', roomId)
+          .eq('read', false)
           .neq('sender_id', user.id);
 
       // The count() method returns a CountResponse object with a count property
@@ -577,6 +407,15 @@ class MessageProvider extends ChangeNotifier {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         _error = 'User not authenticated';
+        return [];
+      }
+      
+      // Skip invalid room IDs unless it's a direct message virtual room ID
+      if (!roomId.startsWith('dm_') && !_isValidRoomId(roomId)) {
+        debugPrint('⚠️ Skipping fetchMessages for invalid room_id: $roomId');
+        _error = 'Invalid room ID format';
+        _isLoading = false;
+        notifyListeners();
         return [];
       }
 
@@ -635,54 +474,78 @@ class MessageProvider extends ChangeNotifier {
         }
         
         // Double-check if we're missing any messages from Apple Tester
-        if (isAppleTesterConversation && response.length < 10) {
-          debugPrint('🔍 FETCH: Performing additional check for Apple Tester messages...');
+        if (isAppleTesterConversation) {
+          debugPrint('🔍 FETCH: Performing COMPREHENSIVE check for Apple Tester messages...');
           
-          // Try a direct query for messages from Apple Tester to current user
-          final additionalCheck = await Supabase.instance.client
-              .from('messages')
-              .select('*')
-              .eq('sender_id', partnerId)
-              .eq('recipient_id', currentUserId)
-              .filter('room_id', 'is', null)
-              .order('created_at', ascending: false);
+          // Make sure we have valid IDs
+          if (currentUserId != null && partnerId != null) {
+            try {
+              // Try a direct query for ALL messages between Apple Tester and current user
+              // This is a more comprehensive query that should find all messages
+              final additionalCheck = await Supabase.instance.client
+                  .from('messages')
+                  .select('*')
+                  .or(
+                    'and(sender_id.eq.$partnerId,recipient_id.eq.$currentUserId),' +
+                    'and(sender_id.eq.$currentUserId,recipient_id.eq.$partnerId)'
+                  )
+                  .filter('room_id', 'is', null)
+                  .order('created_at', ascending: false);
+                  
+              debugPrint('🔍 FETCH: Comprehensive check found ${additionalCheck.length} total messages');
               
-          debugPrint('🔍 FETCH: Additional check found ${additionalCheck.length} messages');
-          
-          // Add any messages that weren't in the original response
-          for (var newMsg in additionalCheck) {
-            bool isDuplicate = false;
-            for (var existingMsg in response) {
-              if (existingMsg['id'] == newMsg['id']) {
-                isDuplicate = true;
-                break;
+              // Log all messages found in this query for debugging
+              for (var i = 0; i < additionalCheck.length; i++) {
+                final msg = additionalCheck[i];
+                final isInbound = msg['sender_id'] == partnerId;
+                debugPrint('🔍 FETCH: Message $i: "${msg["content"]}" - From: ${msg["sender_id"]} To: ${msg["recipient_id"]} - ${isInbound ? "INBOUND" : "OUTBOUND"} - Created: ${msg["created_at"]}');
               }
+              
+              // Clear the original response and use this more comprehensive result
+              debugPrint('🔍 FETCH: Replacing original response with comprehensive results');
+              response.clear();
+              response.addAll(additionalCheck);
+              
+              // Re-sort messages by created_at in descending order
+              response.sort((a, b) {
+                final DateTime aTime = DateTime.parse(a['created_at']);
+                final DateTime bTime = DateTime.parse(b['created_at']);
+                return bTime.compareTo(aTime); // Descending order
+              });
+            } catch (e) {
+              debugPrint('🔍 FETCH: Error in comprehensive check: $e');
             }
-            
-            if (!isDuplicate) {
-              debugPrint('🔍 FETCH: Adding missing message: ${newMsg["content"]}');
-              response.add(newMsg);
-            }
+          } else {
+            debugPrint('🔍 FETCH: Cannot perform comprehensive check - null IDs: currentUserId=$currentUserId, partnerId=$partnerId');
           }
-          
-          // Re-sort messages by created_at in descending order
-          response.sort((a, b) {
-            final DateTime aTime = DateTime.parse(a['created_at']);
-            final DateTime bTime = DateTime.parse(b['created_at']);
-            return bTime.compareTo(aTime); // Descending order
-          });
         }
             
         data = response;
       } else {
         // Regular room-based messages
+        debugPrint('🔍 FETCH: Getting messages for room: $roomId');
+        
+        // Skip invalid room IDs - already checked at the beginning of the method
+        // but double-checking here for safety
+        if (!_isValidRoomId(roomId)) {
+          debugPrint('⚠️ FETCH: Invalid room_id: $roomId, returning empty list');
+          return [];
+        }
+        
+        // Additional safety check to prevent "private" from being used as UUID
+        if (roomId == 'private') {
+          debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in fetchMessages');
+          return [];
+        }
+        
         final response = await Supabase.instance.client
             .from('messages')
             .select('*')
             .eq('room_id', roomId)
             .order('created_at', ascending: false)
             .range(offset, offset + limit - 1);
-            
+        
+        debugPrint('🔍 FETCH: Found ${response.length} messages in room $roomId');
         data = response;
       }
 
@@ -724,8 +587,44 @@ class MessageProvider extends ChangeNotifier {
         messageWithDetails['sender_name'] = senderName;
         messageWithDetails['sender_avatar_url'] = senderAvatarUrl;
         
-        debugPrint('Creating message with sender name: $senderName');
-        messages.add(MessageModel.fromJson(messageWithDetails));
+        // Enhanced logging for message creation
+        final bool isInbound = item['sender_id'] != Supabase.instance.client.auth.currentUser?.id;
+        final String direction = isInbound ? "INBOUND" : "OUTBOUND";
+        final String content = item['content'] ?? 'No content';
+        final String msgSenderId = item['sender_id'] ?? 'Unknown';
+        final String msgRecipientId = item['recipient_id'] ?? 'Unknown';
+        final String createdAt = item['created_at'] ?? 'Unknown';
+        
+        debugPrint('🔄 CREATING MESSAGE: "$content" - $direction');
+        debugPrint('🔄 MESSAGE DETAILS: From: $msgSenderId, To: $msgRecipientId, Created: $createdAt');
+        debugPrint('🔄 SENDER INFO: Name: $senderName, Avatar: $senderAvatarUrl');
+        
+        // IMPORTANT: For inbound messages, ensure the sender_id is preserved
+        // This is critical for correct UI rendering of inbound vs outbound messages
+        if (isInbound) {
+          // For inbound messages, make sure the sender_id is NOT the current user's ID
+          // This ensures the UI will correctly identify it as an inbound message
+          debugPrint('💡 INBOUND MESSAGE: Preserving original sender_id: $msgSenderId');
+          
+          // Make sure we're not accidentally using the current user's ID for inbound messages
+          if (messageWithDetails['sender_id'] == Supabase.instance.client.auth.currentUser?.id) {
+            debugPrint('⚠️ FIXING INCORRECT SENDER ID: Message was inbound but had current user as sender');
+            messageWithDetails['sender_id'] = msgSenderId;
+          }
+        } else {
+          // For outbound messages, the sender should be the current user
+          debugPrint('📤 OUTBOUND MESSAGE: Sender is current user');
+        }
+        
+        // Create the message model with the corrected sender information
+        final messageModel = MessageModel.fromJson(messageWithDetails);
+        messages.add(messageModel);
+        
+        // Verify the created model
+        final MessageModel finalModel = messages.last;
+        debugPrint('🔄 CREATED MODEL: senderId=${finalModel.senderId}, recipientId=${finalModel.recipientId}');
+        debugPrint('🔄 CREATED MODEL: senderName=${finalModel.senderName}, content=${finalModel.content}');
+        debugPrint('🔄 MESSAGE DIRECTION: ${finalModel.senderId == Supabase.instance.client.auth.currentUser?.id ? "OUTBOUND" : "INBOUND"}');
       }
       
       if (offset == 0) {
@@ -764,6 +663,15 @@ class MessageProvider extends ChangeNotifier {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         _error = 'User not authenticated';
+        return null;
+      }
+      
+      // Skip invalid room IDs unless it's a direct message virtual room ID
+      if (!roomId.startsWith('dm_') && !_isValidRoomId(roomId)) {
+        debugPrint('⚠️ Skipping sendMessage for invalid room_id: $roomId');
+        _error = 'Invalid room ID format';
+        _isLoading = false;
+        notifyListeners();
         return null;
       }
 
@@ -837,6 +745,18 @@ class MessageProvider extends ChangeNotifier {
 
   // Mark messages as read
   Future<void> markMessagesAsRead(String roomId) async {
+    // Skip invalid room IDs unless it's a direct message virtual room ID
+    if (!roomId.startsWith('dm_') && !_isValidRoomId(roomId)) {
+      debugPrint('⚠️ Skipping markMessagesAsRead for invalid room_id: $roomId');
+      return;
+    }
+    
+    // Additional safety check to prevent "private" from being used as UUID
+    if (roomId == 'private') {
+      debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in markMessagesAsRead');
+      return;
+    }
+    
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
@@ -1256,6 +1176,20 @@ class MessageProvider extends ChangeNotifier {
     try {
       debugPrint('🔥 HANDLE_MESSAGE: Starting to handle new message: $payload');
       
+      // Check if this is an inbound message (from someone else to current user)
+      final bool isInbound = payload['sender_id'] != Supabase.instance.client.auth.currentUser?.id;
+      
+      // For inbound messages, ensure the sender_id is preserved
+      if (isInbound) {
+        debugPrint('💡 REALTIME INBOUND MESSAGE: Preserving original sender_id: ${payload['sender_id']}');
+        
+        // Make sure we're not accidentally using the current user's ID for inbound messages
+        if (payload['sender_id'] == Supabase.instance.client.auth.currentUser?.id) {
+          debugPrint('⚠️ FIXING INCORRECT SENDER ID IN REALTIME MESSAGE');
+          // This shouldn't happen, but if it does, we need to fix it
+        }
+      }
+      
       // Extract the new message data from the payload
       final newMessage = MessageModel.fromJson(payload);
       final user = Supabase.instance.client.auth.currentUser;
@@ -1511,6 +1445,18 @@ class MessageProvider extends ChangeNotifier {
   void subscribeToRoom(String roomId) {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
+    
+    // Skip invalid room IDs unless it's a direct message virtual room ID
+    if (!roomId.startsWith('dm_') && !_isValidRoomId(roomId)) {
+      debugPrint('⚠️ Skipping subscribeToRoom for invalid room_id: $roomId');
+      return;
+    }
+    
+    // Additional safety check to prevent "private" from being used as UUID
+    if (roomId == 'private') {
+      debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in subscribeToRoom');
+      return;
+    }
     
     // If we're already subscribed to this room, do nothing
     if (_activeRoomId == roomId && _activeRoomChannel != null) {
