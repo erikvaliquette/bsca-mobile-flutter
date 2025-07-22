@@ -2,40 +2,44 @@ import 'package:flutter/foundation.dart';
 
 class WorkHistory {
   final String? company;
-  final String? position;
+  final String? title;
   final String? description;
   final DateTime? startDate;
   final DateTime? endDate;
   final bool? isCurrent;
+  final String? organizationId; // For employment validation
 
   WorkHistory({
     this.company,
-    this.position,
+    this.title,
     this.description,
     this.startDate,
     this.endDate,
     this.isCurrent,
+    this.organizationId,
   });
 
   factory WorkHistory.fromJson(Map<String, dynamic> json) {
     return WorkHistory(
       company: json['company'] as String?,
-      position: json['position'] as String?,
+      title: json['title'] as String?,
       description: json['description'] as String?,
       startDate: json['start_date'] != null ? DateTime.parse(json['start_date'] as String) : null,
       endDate: json['end_date'] != null ? DateTime.parse(json['end_date'] as String) : null,
-      isCurrent: json['is_current'] as bool?,
+      isCurrent: json['current'] as bool?,
+      organizationId: json['organization_id'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'company': company,
-      'position': position,
+      'title': title,
       'description': description,
       'start_date': startDate?.toIso8601String(),
       'end_date': endDate?.toIso8601String(),
-      'is_current': isCurrent,
+      'current': isCurrent,
+      'organization_id': organizationId,
     };
   }
 }

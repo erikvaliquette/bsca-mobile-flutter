@@ -1,21 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:bsca_mobile_flutter/models/organization_model.dart';
+import 'package:bsca_mobile_flutter/models/organization_membership_model.dart';
+import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
+import 'package:bsca_mobile_flutter/services/organization_service.dart';
+import 'package:bsca_mobile_flutter/services/validation_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:bsca_mobile_flutter/screens/organization/carbon_footprint_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/team_members_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/activities_screen.dart';
+import 'package:bsca_mobile_flutter/screens/organization/validation_requests_screen.dart';
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:bsca_mobile_flutter/services/organization_carbon_footprint_service.dart';
 import 'package:bsca_mobile_flutter/models/organization_carbon_footprint_model.dart';
 
-class OrganizationProfileScreen extends StatelessWidget {
+class OrganizationProfileScreen extends StatefulWidget {
   final Organization organization;
 
   const OrganizationProfileScreen({
     super.key,
     required this.organization,
   });
+
+  @override
+  State<OrganizationProfileScreen> createState() => _OrganizationProfileScreenState();
+}
+
+class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
+  // Add keys to force FutureBuilder refresh
+  Key _teamMembersKey = UniqueKey();
+  Key _validationStatsKey = UniqueKey();
+  
+  void _refreshData() {
+    setState(() {
+      _teamMembersKey = UniqueKey();
+      _validationStatsKey = UniqueKey();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +62,8 @@ class OrganizationProfileScreen extends StatelessWidget {
             const SizedBox(height: 24),
             _buildTeamSection(context),
             const SizedBox(height: 24),
+            _buildValidationSection(context),
+            const SizedBox(height: 24),
             _buildActivitiesSection(context),
             const SizedBox(height: 24),
             _buildContactSection(context),
@@ -57,11 +81,11 @@ class OrganizationProfileScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (organization.logoUrl != null && organization.logoUrl!.isNotEmpty)
+            if (widget.organization.logoUrl != null && widget.organization.logoUrl!.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8.0),
                 child: Image.network(
-                  organization.logoUrl!,
+                  widget.organization.logoUrl!,
                   height: 120,
                   width: 120,
                   fit: BoxFit.cover,
@@ -98,24 +122,24 @@ class OrganizationProfileScreen extends StatelessWidget {
               ),
             const SizedBox(height: 16),
             Text(
-              organization.name,
+              widget.organization.name,
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
-            if (organization.location != null && organization.location!.isNotEmpty) ...[
+            if (widget.organization.location != null && widget.organization.location!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.location_on, size: 16),
                   const SizedBox(width: 4),
-                  Text(organization.location!),
+                  Text(widget.organization.location!),
                 ],
               ),
             ],
-            if (organization.foundedYear != null) ...[
+            if (widget.organization.foundedYear != null) ...[
               const SizedBox(height: 8),
-              Text('Founded in ${organization.foundedYear}'),
+              Text('Founded in ${widget.organization.foundedYear}'),
             ],
           ],
         ),
@@ -137,7 +161,7 @@ class OrganizationProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              organization.description ?? 'No description available.',
+              widget.organization.description ?? 'No description available.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
@@ -159,12 +183,12 @@ class OrganizationProfileScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            if (organization.sdgFocusAreas != null &&
-                organization.sdgFocusAreas!.isNotEmpty)
+            if (widget.organization.sdgFocusAreas != null &&
+                widget.organization.sdgFocusAreas!.isNotEmpty)
               Wrap(
                 spacing: 8.0,
                 runSpacing: 8.0,
-                children: organization.sdgFocusAreas!.map((sdg) {
+                children: widget.organization.sdgFocusAreas!.map((sdg) {
                   return Chip(
                     label: Text(sdg),
                     backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
@@ -197,16 +221,16 @@ class OrganizationProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (organization.sustainabilityMetrics == null || 
-                organization.sustainabilityMetrics!.isEmpty)
+            if (widget.organization.sustainabilityMetrics == null || 
+                widget.organization.sustainabilityMetrics!.isEmpty)
               const Text('No sustainability metrics available')
             else
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: organization.sustainabilityMetrics!.length,
+                itemCount: widget.organization.sustainabilityMetrics!.length,
                 itemBuilder: (context, index) {
-                  final metric = organization.sustainabilityMetrics![index];
+                  final metric = widget.organization.sustainabilityMetrics![index];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
                     child: Column(
@@ -290,7 +314,7 @@ class OrganizationProfileScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (context) => CarbonCalculatorScreen(
-                              organization: organization,
+                              organization: widget.organization,
                             ),
                           ),
                         );
@@ -304,7 +328,7 @@ class OrganizationProfileScreen extends StatelessWidget {
             const SizedBox(height: 16),
             FutureBuilder<OrganizationCarbonFootprint?>(
               future: OrganizationCarbonFootprintService.instance
-                  .getOrganizationCarbonFootprint(organization.id),
+                  .getOrganizationCarbonFootprint(widget.organization.id),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -576,15 +600,16 @@ class OrganizationProfileScreen extends StatelessWidget {
                   'Team',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (organization.teamMembers != null && 
-                    organization.teamMembers!.isNotEmpty)
+                if (widget.organization.teamMembers != null && 
+                    widget.organization.teamMembers!.isNotEmpty)
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => TeamMembersScreen(
-                            teamMembers: organization.teamMembers!,
+                            organizationId: widget.organization.id,
+                            organizationName: widget.organization.name,
                           ),
                         ),
                       );
@@ -594,47 +619,104 @@ class OrganizationProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (organization.teamMembers == null || 
-                organization.teamMembers!.isEmpty)
-              const Text('No team members available')
-            else
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: organization.teamMembers!.length > 5 
-                      ? 5 
-                      : organization.teamMembers!.length,
-                  itemBuilder: (context, index) {
-                    final member = organization.teamMembers![index];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 16.0),
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundImage: member.photoUrl != null && member.photoUrl!.isNotEmpty
-                                ? NetworkImage(member.photoUrl!)
-                                : null,
-                            child: member.photoUrl == null || member.photoUrl!.isEmpty
-                                ? Text(
-                                    member.name.isNotEmpty ? member.name.substring(0, 1) : '?',
-                                    style: const TextStyle(fontSize: 24),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            member.name.isNotEmpty ? member.name.split(' ').first : 'Unknown',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
+            FutureBuilder<List<OrganizationMembership>>(
+              key: _teamMembersKey,
+              future: OrganizationService.instance.getOrganizationMemberships(widget.organization.id),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                
+                if (snapshot.hasError) {
+                  return Text(
+                    'Error loading team members: ${snapshot.error}',
+                    style: TextStyle(color: Colors.red[600]),
+                  );
+                }
+                
+                final memberships = snapshot.data ?? [];
+                final approvedMemberships = memberships
+                    .where((m) => m.status == 'approved')
+                    .toList();
+                
+                if (approvedMemberships.isEmpty) {
+                  return const Text('No validated team members yet');
+                }
+                
+                return SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: approvedMemberships.length > 5 
+                        ? 5 
+                        : approvedMemberships.length,
+                    itemBuilder: (context, index) {
+                      final membership = approvedMemberships[index];
+                      final profile = membership.userProfile;
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: Column(
+                          children: [
+                            Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundImage: profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty
+                                      ? NetworkImage(profile.avatarUrl!)
+                                      : null,
+                                  child: profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty
+                                      ? Text(
+                                          profile?.displayName.isNotEmpty == true 
+                                              ? profile!.displayName.substring(0, 1).toUpperCase()
+                                              : profile?.firstName?.isNotEmpty == true
+                                                  ? profile!.firstName!.substring(0, 1).toUpperCase()
+                                                  : '?',
+                                          style: const TextStyle(fontSize: 24),
+                                        )
+                                      : null,
+                                ),
+                                if (membership.role == 'admin')
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                      ),
+                                      child: const Icon(
+                                        Icons.star,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              profile?.displayName.isNotEmpty == true 
+                                  ? profile!.displayName.split(' ').first
+                                  : profile?.firstName ?? 'Unknown',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -656,15 +738,15 @@ class OrganizationProfileScreen extends StatelessWidget {
                   'Recent Activities',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (organization.activities != null && 
-                    organization.activities!.isNotEmpty)
+                if (widget.organization.activities != null && 
+                    widget.organization.activities!.isNotEmpty)
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ActivitiesScreen(
-                            activities: organization.activities!,
+                            activities: widget.organization.activities!,
                           ),
                         ),
                       );
@@ -674,18 +756,18 @@ class OrganizationProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (organization.activities == null || 
-                organization.activities!.isEmpty)
+            if (widget.organization.activities == null || 
+                widget.organization.activities!.isEmpty)
               const Text('No recent activities available')
             else
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: organization.activities!.length > 3 
+                itemCount: widget.organization.activities!.length > 3 
                     ? 3 
-                    : organization.activities!.length,
+                    : widget.organization.activities!.length,
                 itemBuilder: (context, index) {
-                  final activity = organization.activities![index];
+                  final activity = widget.organization.activities![index];
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
@@ -718,12 +800,12 @@ class OrganizationProfileScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            if (organization.website != null && organization.website!.isNotEmpty)
+            if (widget.organization.website != null && widget.organization.website!.isNotEmpty)
               InkWell(
                 onTap: () async {
-                  final url = Uri.parse(organization.website!.startsWith('http') 
-                      ? organization.website! 
-                      : 'https://${organization.website!}');
+                  final url = Uri.parse(widget.organization.website!.startsWith('http') 
+                      ? widget.organization.website! 
+                      : 'https://${widget.organization.website!}');
                   if (await canLaunchUrl(url)) {
                     await launchUrl(url);
                   }
@@ -736,7 +818,7 @@ class OrganizationProfileScreen extends StatelessWidget {
                       const SizedBox(width: 16),
                       Expanded(
                         child: Text(
-                          organization.website!,
+                          widget.organization.website!,
                           style: TextStyle(
                             color: Theme.of(context).primaryColor,
                             decoration: TextDecoration.underline,
@@ -791,5 +873,128 @@ class OrganizationProfileScreen extends StatelessWidget {
     } else {
       return const Icon(Icons.star);
     }
+  }
+
+  Widget _buildValidationSection(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userId = authProvider.user?.id;
+
+    if (userId == null) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<bool>(
+      future: OrganizationService.instance.isUserAdminOfOrganization(userId, widget.organization.id),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!) {
+          return const SizedBox.shrink();
+        }
+
+        return Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.verified_user,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Employment Validation',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Manage employment validation requests for your organization.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                FutureBuilder<Map<String, int>>(
+                  key: _validationStatsKey,
+                  future: ValidationService.instance.getValidationStatistics(
+                    organizationId: widget.organization.id,
+                    adminUserId: userId,
+                  ),
+                  builder: (context, statsSnapshot) {
+                    if (statsSnapshot.hasData && statsSnapshot.data!.isNotEmpty) {
+                      final stats = statsSnapshot.data!;
+                      final pendingCount = stats['pending'] ?? 0;
+                      final totalCount = stats['total'] ?? 0;
+                      final approvedCount = stats['approved'] ?? 0;
+
+                      return Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildStatItem(context, 'Total', totalCount.toString(), Colors.blue),
+                              _buildStatItem(context, 'Approved', approvedCount.toString(), Colors.green),
+                              _buildStatItem(context, 'Pending', pendingCount.toString(), Colors.orange),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ValidationRequestsScreen(
+                            organizationId: widget.organization.id,
+                            organizationName: widget.organization.name,
+                          ),
+                        ),
+                      );
+                      // Refresh data when returning from validation requests
+                      if (result == true || result == null) {
+                        _refreshData();
+                      }
+                    },
+                    icon: const Icon(Icons.list_alt),
+                    label: const Text('View Validation Requests'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(BuildContext context, String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
   }
 }

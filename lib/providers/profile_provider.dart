@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/profile_model.dart';
+import '../services/validation_service.dart';
 
 class ProfileProvider extends ChangeNotifier {
   ProfileModel? _profile;
@@ -47,10 +48,13 @@ class ProfileProvider extends ChangeNotifier {
           .eq('user_id', user.id);
       
       // Fetch work history
+      debugPrint('Fetching work history for user: ${user.id}');
       final workHistoryResponse = await Supabase.instance.client
           .from('work_history')
           .select()
           .eq('user_id', user.id);
+      debugPrint('Work history response: $workHistoryResponse');
+      debugPrint('Work history count: ${workHistoryResponse?.length ?? 0}');
       
       // Fetch education history
       final educationResponse = await Supabase.instance.client
@@ -120,10 +124,17 @@ class ProfileProvider extends ChangeNotifier {
       }
       
       // Process work history
+      debugPrint('Processing work history data...');
       List<Map<String, dynamic>> workHistoryJson = [];
       if (workHistoryResponse != null && workHistoryResponse is List && workHistoryResponse.isNotEmpty) {
+        debugPrint('Work history found: ${workHistoryResponse.length} items');
         workHistoryJson = workHistoryResponse.map<Map<String, dynamic>>((work) => work as Map<String, dynamic>).toList();
         completeProfileData['work_history'] = workHistoryJson;
+        debugPrint('Work history processed and added to profile data');
+      } else {
+        debugPrint('No work history found - workHistoryResponse is null, not a list, or empty');
+        debugPrint('workHistoryResponse type: ${workHistoryResponse.runtimeType}');
+        debugPrint('workHistoryResponse value: $workHistoryResponse');
       }
       
       // Process education history
@@ -318,21 +329,47 @@ class ProfileProvider extends ChangeNotifier {
       
       // Update work history if provided
       if (workHistory != null) {
+        debugPrint('Updating work history for user ${user.id}');
+        debugPrint('Work history items to save: ${workHistory.length}');
+        
         // First delete existing work history
         await Supabase.instance.client
             .from('work_history')
             .delete()
             .eq('user_id', user.id);
+        debugPrint('Deleted existing work history');
         
         // Then insert new work history
         for (WorkHistory work in workHistory) {
+          final workData = {
+            'user_id': user.id,
+            ...work.toJson(),
+          };
+          debugPrint('Inserting work history: $workData');
+          
           await Supabase.instance.client
               .from('work_history')
-              .insert({
-                'user_id': user.id,
-                ...work.toJson(),
-              });
+              .insert(workData);
+          
+          debugPrint('Successfully inserted work history for ${work.company}');
+          
+          // If work history has organizationId, create validation request
+          if (work.organizationId != null) {
+            debugPrint('Work history has organizationId: ${work.organizationId}, creating validation request');
+            try {
+              final validationService = ValidationService.instance;
+              await validationService.requestEmploymentValidation(
+                userId: user.id,
+                organizationId: work.organizationId!,
+                role: 'member', // Default role for employment validation
+              );
+              debugPrint('Created validation request for organization ${work.organizationId}');
+            } catch (e) {
+              debugPrint('Error creating validation request: $e');
+            }
+          }
         }
+        debugPrint('Completed work history update');
       }
       
       // Update education if provided

@@ -137,6 +137,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
       
+      // Debug work history before saving
+      debugPrint('=== EDIT PROFILE SAVE DEBUG ===');
+      debugPrint('Work history items to save: ${_workHistory.length}');
+      for (int i = 0; i < _workHistory.length; i++) {
+        final work = _workHistory[i];
+        debugPrint('Work history [$i]: Company: ${work.company}, Title: ${work.title}, OrganizationId: ${work.organizationId}');
+      }
+      debugPrint('SDG Goals: $_selectedSdgGoals');
+      debugPrint('Bio: ${_bioController.text}');
+      
       // Update profile - removed username and fullName fields
       await profileProvider.updateFullProfile(
         avatarUrl: newAvatarUrl,
@@ -420,7 +430,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                     ],
                   ),
-                  Text(work.position ?? 'Position'),
+                  Text(work.title ?? 'Position'),
                   const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: () => _editWorkHistory(index),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bsca_mobile_flutter/models/organization_model.dart';
+import 'package:bsca_mobile_flutter/models/organization_membership_model.dart';
 
 class OrganizationService {
   OrganizationService._();
@@ -8,67 +9,333 @@ class OrganizationService {
 
   final _client = Supabase.instance.client;
 
-  /// Get all organizations for the current user
+  /// Get all organizations for the current user (approved memberships only)
   Future<List<Organization>> getOrganizationsForUser(String userId) async {
     try {
-      // First try to find organizations where the user is an admin
-      final adminOrgsResponse = await _client
-          .from('organizations')
-          .select()
-          .contains('admin_ids', [userId]);
-      
-      // Then try to find organizations where the user is a member
-      final memberOrgsResponse = await _client
-          .from('organizations')
-          .select()
-          .contains('member_ids', [userId]);
-      
-      // Combine and deduplicate results
       final Set<String> orgIds = {};
       final List<Organization> organizations = [];
       
-      // Process admin orgs
-      for (final org in adminOrgsResponse) {
-        if (!orgIds.contains(org['id'])) {
-          orgIds.add(org['id']);
-          organizations.add(_mapToOrganization(org));
+      // 1. Query organization_members table for approved memberships (new system)
+      try {
+        final membershipResponse = await _client
+            .from('organization_members')
+            .select('organization_id, role, status, organizations(*)')
+            .eq('user_id', userId)
+            .eq('status', 'approved');
+        
+        for (final membership in membershipResponse) {
+          if (membership['organizations'] != null) {
+            final org = _mapToOrganization(membership['organizations']);
+            if (!orgIds.contains(org.id)) {
+              orgIds.add(org.id);
+              organizations.add(org);
+            }
+          }
         }
+      } catch (e) {
+        debugPrint('Error querying organization_members: $e');
       }
       
-      // Process member orgs
-      for (final org in memberOrgsResponse) {
-        if (!orgIds.contains(org['id'])) {
-          orgIds.add(org['id']);
-          organizations.add(_mapToOrganization(org));
+      // 2. BACKWARD COMPATIBILITY: Check legacy array fields in organizations table
+      try {
+        // Check admin_ids array
+        final adminOrgsResponse = await _client
+            .from('organizations')
+            .select()
+            .contains('admin_ids', [userId]);
+        
+        for (final org in adminOrgsResponse) {
+          if (!orgIds.contains(org['id'])) {
+            orgIds.add(org['id']);
+            organizations.add(_mapToOrganization(org));
+          }
         }
+        
+        // Check member_ids array
+        final memberOrgsResponse = await _client
+            .from('organizations')
+            .select()
+            .contains('member_ids', [userId]);
+        
+        for (final org in memberOrgsResponse) {
+          if (!orgIds.contains(org['id'])) {
+            orgIds.add(org['id']);
+            organizations.add(_mapToOrganization(org));
+          }
+        }
+      } catch (e) {
+        debugPrint('Error querying legacy organization arrays: $e');
       }
       
-      // If no organizations found, check if user has an organization in their profile
-      if (organizations.isEmpty) {
+      // 3. Also check if user has a primary organization in their profile
+      try {
         final userProfile = await _client
             .from('profiles')
             .select('organization_id')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
         
         if (userProfile != null && userProfile['organization_id'] != null) {
           final orgId = userProfile['organization_id'];
-          final orgResponse = await _client
-              .from('organizations')
-              .select()
-              .eq('id', orgId)
-              .single();
           
-          if (orgResponse != null && !orgIds.contains(orgResponse['id'])) {
-            organizations.add(_mapToOrganization(orgResponse));
+          if (!orgIds.contains(orgId)) {
+            final orgResponse = await _client
+                .from('organizations')
+                .select()
+                .eq('id', orgId)
+                .maybeSingle();
+            
+            if (orgResponse != null) {
+              organizations.add(_mapToOrganization(orgResponse));
+            }
           }
         }
+      } catch (e) {
+        debugPrint('Error fetching user profile organization: $e');
       }
       
+      debugPrint('Found ${organizations.length} organizations for user $userId');
       return organizations;
     } catch (e) {
       debugPrint('Error getting organizations for user: $e');
       return [];
+    }
+  }
+
+  /// Get all organizations for the current user including pending memberships
+  Future<List<OrganizationMembership>> getOrganizationMembershipsForUser(String userId) async {
+    try {
+      final membershipResponse = await _client
+          .from('organization_members')
+          .select('*, organizations(*)')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      
+      final List<OrganizationMembership> memberships = [];
+      
+      for (final membership in membershipResponse) {
+        if (membership['organizations'] != null) {
+          memberships.add(OrganizationMembership(
+            id: membership['id'],
+            organizationId: membership['organization_id'],
+            userId: membership['user_id'],
+            role: membership['role'] ?? 'member',
+            status: membership['status'] ?? 'pending',
+            joinedAt: membership['joined_at'] != null 
+                ? DateTime.parse(membership['joined_at']) 
+                : null,
+            createdAt: DateTime.parse(membership['created_at']),
+            updatedAt: DateTime.parse(membership['updated_at']),
+            organization: _mapToOrganization(membership['organizations']),
+          ));
+        }
+      }
+      
+      return memberships;
+    } catch (e) {
+      debugPrint('Error getting organization memberships for user: $e');
+      return [];
+    }
+  }
+
+  /// Get all memberships for a specific organization (with user profiles)
+  Future<List<OrganizationMembership>> getOrganizationMemberships(String organizationId, {String? status}) async {
+    try {
+      debugPrint('Fetching organization memberships for: $organizationId');
+      
+      // First, get the memberships without trying to join profiles
+      var query = _client
+          .from('organization_members')
+          .select('*')
+          .eq('organization_id', organizationId);
+      
+      if (status != null) {
+        query = query.eq('status', status);
+      }
+      
+      final membershipResponse = await query.order('created_at', ascending: false);
+      debugPrint('Found ${membershipResponse.length} memberships');
+      
+      final List<OrganizationMembership> memberships = [];
+      
+      // Manually fetch user profiles for each membership
+      for (final membership in membershipResponse) {
+        UserProfile? userProfile;
+        
+        try {
+          final profileResponse = await _client
+              .from('profiles')
+              .select('id, first_name, last_name, email, avatar_url, headline, company_name')
+              .eq('id', membership['user_id'])
+              .maybeSingle();
+          
+          if (profileResponse != null) {
+            userProfile = UserProfile.fromJson(profileResponse);
+          }
+        } catch (e) {
+          debugPrint('Error fetching profile for user ${membership['user_id']}: $e');
+        }
+        
+        memberships.add(OrganizationMembership(
+          id: membership['id'],
+          organizationId: membership['organization_id'],
+          userId: membership['user_id'],
+          role: membership['role'] ?? 'member',
+          status: membership['status'] ?? 'pending',
+          joinedAt: membership['joined_at'] != null 
+              ? DateTime.parse(membership['joined_at']) 
+              : null,
+          createdAt: DateTime.parse(membership['created_at']),
+          updatedAt: DateTime.parse(membership['updated_at']),
+          userProfile: userProfile,
+        ));
+      }
+      
+      debugPrint('Successfully loaded ${memberships.length} memberships with profiles');
+      return memberships;
+    } catch (e) {
+      debugPrint('Error getting organization memberships: $e');
+      return [];
+    }
+  }
+
+  /// Get all members of an organization
+  Future<List<OrganizationMembership>> getOrganizationMembers(String organizationId, {String? status}) async {
+    try {
+      var query = _client
+          .from('organization_members')
+          .select('*, profiles(*)')
+          .eq('organization_id', organizationId);
+      
+      if (status != null) {
+        query = query.eq('status', status);
+      }
+      
+      final membershipResponse = await query.order('created_at', ascending: false);
+      
+      final List<OrganizationMembership> memberships = [];
+      
+      for (final membership in membershipResponse) {
+        memberships.add(OrganizationMembership(
+          id: membership['id'],
+          organizationId: membership['organization_id'],
+          userId: membership['user_id'],
+          role: membership['role'] ?? 'member',
+          status: membership['status'] ?? 'pending',
+          joinedAt: membership['joined_at'] != null 
+              ? DateTime.parse(membership['joined_at']) 
+              : null,
+          createdAt: DateTime.parse(membership['created_at']),
+          updatedAt: DateTime.parse(membership['updated_at']),
+          userProfile: membership['profiles'] != null 
+              ? _mapToUserProfile(membership['profiles']) 
+              : null,
+        ));
+      }
+      
+      return memberships;
+    } catch (e) {
+      debugPrint('Error getting organization members: $e');
+      return [];
+    }
+  }
+
+  /// Check if user is admin of an organization
+  Future<bool> isUserAdminOfOrganization(String userId, String organizationId) async {
+    try {
+      // 1. Check new organization_members table
+      try {
+        final membership = await _client
+            .from('organization_members')
+            .select('role')
+            .eq('user_id', userId)
+            .eq('organization_id', organizationId)
+            .eq('status', 'approved')
+            .maybeSingle();
+        
+        if (membership != null && membership['role'] == 'admin') {
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Error checking organization_members for admin status: $e');
+      }
+      
+      // 2. BACKWARD COMPATIBILITY: Check legacy admin_ids array
+      try {
+        final orgResponse = await _client
+            .from('organizations')
+            .select('admin_ids')
+            .eq('id', organizationId)
+            .maybeSingle();
+        
+        if (orgResponse != null && orgResponse['admin_ids'] != null) {
+          final adminIds = List<String>.from(orgResponse['admin_ids']);
+          return adminIds.contains(userId);
+        }
+      } catch (e) {
+        debugPrint('Error checking legacy admin_ids: $e');
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('Error checking admin status: $e');
+      return false;
+    }
+  }
+
+  /// Check if user is member of an organization (any role, approved status)
+  Future<bool> isUserMemberOfOrganization(String userId, String organizationId) async {
+    try {
+      // 1. Check new organization_members table
+      try {
+        final membership = await _client
+            .from('organization_members')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('organization_id', organizationId)
+            .eq('status', 'approved')
+            .maybeSingle();
+        
+        if (membership != null) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Error checking organization_members for membership: $e');
+      }
+      
+      // 2. BACKWARD COMPATIBILITY: Check legacy arrays
+      try {
+        final orgResponse = await _client
+            .from('organizations')
+            .select('admin_ids, member_ids')
+            .eq('id', organizationId)
+            .maybeSingle();
+        
+        if (orgResponse != null) {
+          // Check admin_ids array
+          if (orgResponse['admin_ids'] != null) {
+            final adminIds = List<String>.from(orgResponse['admin_ids']);
+            if (adminIds.contains(userId)) {
+              return true;
+            }
+          }
+          
+          // Check member_ids array
+          if (orgResponse['member_ids'] != null) {
+            final memberIds = List<String>.from(orgResponse['member_ids']);
+            if (memberIds.contains(userId)) {
+              return true;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error checking legacy member arrays: $e');
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('Error checking membership status: $e');
+      return false;
     }
   }
 
@@ -120,6 +387,19 @@ class OrganizationService {
     return null;
   }
   
+  /// Map Supabase response to UserProfile model
+  UserProfile _mapToUserProfile(Map<String, dynamic> data) {
+    return UserProfile(
+      id: data['id'].toString(),
+      firstName: data['first_name'],
+      lastName: data['last_name'],
+      email: data['email'],
+      avatarUrl: data['avatar_url'],
+      headline: data['headline'],
+      companyName: data['company_name'],
+    );
+  }
+
   /// Get organization carbon footprint
   Future<CarbonFootprint?> getOrganizationCarbonFootprint(String organizationId) async {
     // Since the table doesn't exist, return a default carbon footprint object

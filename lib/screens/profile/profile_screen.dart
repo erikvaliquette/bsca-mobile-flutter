@@ -5,6 +5,7 @@ import '../../providers/profile_provider.dart';
 import '../../models/profile_model.dart';
 import '../../utils/sdg_icons.dart';
 import '../../widgets/sdg_icon_widget.dart';
+import '../../widgets/validation_status_widget.dart';
 import '../../services/sdg_icon_service.dart';
 import 'edit_profile_screen.dart';
 
@@ -342,6 +343,8 @@ Widget _buildSection(BuildContext context, String title, Widget content) {
 Widget _buildWorkHistoryItem(BuildContext context, WorkHistory work) {
   final dateFormat = (date) => date?.year.toString() ?? 'Present';
   final dateRange = '${dateFormat(work.startDate)} - ${work.isCurrent == true ? 'Present' : dateFormat(work.endDate)}';
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final userId = authProvider.user?.id;
   
   return Card(
     margin: const EdgeInsets.only(bottom: 12),
@@ -350,11 +353,33 @@ Widget _buildWorkHistoryItem(BuildContext context, WorkHistory work) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            work.position ?? 'Position',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  work.title ?? 'Position',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              if (userId != null)
+                ValidationStatusWidget(
+                  userId: userId,
+                  organizationId: work.organizationId,
+                  organizationName: work.company,
+                  onValidationRequested: () {
+                    // Optionally refresh profile data
+                    Provider.of<ProfileProvider>(context, listen: false)
+                        .fetchCurrentUserProfile();
+                  },
+                  onValidationCancelled: () {
+                    // Optionally refresh profile data
+                    Provider.of<ProfileProvider>(context, listen: false)
+                        .fetchCurrentUserProfile();
+                  },
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
