@@ -6,6 +6,8 @@ import 'package:bsca_mobile_flutter/screens/organization/team_members_screen.dar
 import 'package:bsca_mobile_flutter/screens/organization/activities_screen.dart';
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 import 'package:intl/intl.dart';
+import 'package:bsca_mobile_flutter/services/organization_carbon_footprint_service.dart';
+import 'package:bsca_mobile_flutter/models/organization_carbon_footprint_model.dart';
 
 class OrganizationProfileScreen extends StatelessWidget {
   final Organization organization;
@@ -266,8 +268,6 @@ class OrganizationProfileScreen extends StatelessWidget {
   }
 
   Widget _buildCarbonFootprintSection(BuildContext context) {
-    final carbonFootprint = organization.carbonFootprint;
-    
     return Card(
       elevation: 2,
       child: Padding(
@@ -282,102 +282,282 @@ class OrganizationProfileScreen extends StatelessWidget {
                   'Carbon Footprint',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (carbonFootprint != null)
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CarbonFootprintScreen(
-                                carbonFootprint: carbonFootprint,
-                              ),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CarbonCalculatorScreen(
+                              organization: organization,
                             ),
-                          );
-                        },
-                        child: const Text('View Details'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CarbonCalculatorScreen(
-                                organization: organization,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Calculate'),
-                      ),
-                    ],
-                  ),
+                          ),
+                        );
+                      },
+                      child: const Text('Calculate'),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            if (carbonFootprint == null)
-              const Text('No carbon footprint data available')
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.co2,
-                        color: Theme.of(context).primaryColor,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${carbonFootprint.totalEmissions} ${carbonFootprint.unit}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '(${carbonFootprint.year})',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (carbonFootprint.reductionGoal != null && 
-                      carbonFootprint.reductionTarget != null) ...[
-                    Text(
-                      'Reduction Goal: ${carbonFootprint.reductionGoal}% by ${DateTime.now().year + 5}',
-                      style: Theme.of(context).textTheme.bodyMedium,
+            FutureBuilder<OrganizationCarbonFootprint?>(
+              future: OrganizationCarbonFootprintService.instance
+                  .getOrganizationCarbonFootprint(organization.id),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: CircularProgressIndicator(),
                     ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: carbonFootprint.totalEmissions > 0 ? 
-                        (carbonFootprint.totalEmissions - (carbonFootprint.reductionTarget ?? 0)) / 
-                        (carbonFootprint.totalEmissions * (carbonFootprint.reductionGoal ?? 1) / 100) : 0,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.green,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  );
+                }
+                
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
                       children: [
+                        const Icon(Icons.error_outline, color: Colors.red),
+                        const SizedBox(height: 8),
                         Text(
-                          'Current: ${carbonFootprint.totalEmissions} ${carbonFootprint.unit}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Text(
-                          'Target: ${carbonFootprint.reductionTarget} ${carbonFootprint.unit}',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          'Error loading carbon footprint data',
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
                     ),
+                  );
+                }
+                
+                final carbonFootprint = snapshot.data;
+                
+                if (carbonFootprint == null) {
+                  return Column(
+                    children: [
+                      const Icon(Icons.eco, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No carbon footprint data available',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Start tracking business trips to see emissions data',
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  );
+                }
+                
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // View Details button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CarbonFootprintScreen(
+                                  carbonFootprint: carbonFootprint.toLegacyCarbonFootprint(),
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text('View Details'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Total emissions display
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.co2,
+                          color: Theme.of(context).primaryColor,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          carbonFootprint.formattedTotalEmissions,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '(${carbonFootprint.year})',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Scope breakdown
+                    _buildScopeBreakdown(context, carbonFootprint),
+                    const SizedBox(height: 16),
+                    
+                    // Business travel highlight (if any)
+                    if ((carbonFootprint.scope3BusinessTravel ?? 0) > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.flight, color: Colors.green, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Business Travel: ${carbonFootprint.scope3BusinessTravel!.toStringAsFixed(3)} ${carbonFootprint.unit}',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.green[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    
+                    // Reduction goals (if available)
+                    if (carbonFootprint.reductionGoal != null && 
+                        carbonFootprint.reductionTarget != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Reduction Goal: ${carbonFootprint.reductionGoal}% by ${DateTime.now().year + 5}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: carbonFootprint.totalEmissions > 0 ? 
+                          (carbonFootprint.totalEmissions - (carbonFootprint.reductionTarget ?? 0)) / 
+                          (carbonFootprint.totalEmissions * (carbonFootprint.reductionGoal ?? 1) / 100) : 0,
+                        backgroundColor: Colors.grey[300],
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Current: ${carbonFootprint.formattedTotalEmissions}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          Text(
+                            'Target: ${carbonFootprint.reductionTarget} ${carbonFootprint.unit}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                );
+              },
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildScopeBreakdown(BuildContext context, OrganizationCarbonFootprint carbonFootprint) {
+    final scopeData = [
+      {
+        'name': 'Scope 1',
+        'value': carbonFootprint.scope1Total,
+        'color': Colors.red,
+        'description': 'Direct emissions',
+      },
+      {
+        'name': 'Scope 2',
+        'value': carbonFootprint.scope2Total,
+        'color': Colors.orange,
+        'description': 'Indirect energy emissions',
+      },
+      {
+        'name': 'Scope 3',
+        'value': carbonFootprint.scope3Total,
+        'color': Colors.blue,
+        'description': 'Other indirect emissions',
+      },
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Emissions by Scope',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...scopeData.map((scope) {
+          final percentage = carbonFootprint.totalEmissions > 0
+              ? (scope['value'] as double) / carbonFootprint.totalEmissions * 100
+              : 0.0;
+          
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: scope['color'] as Color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            scope['name'] as String,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            '${(scope['value'] as double).toStringAsFixed(3)} ${carbonFootprint.unit}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      Text(
+                        scope['description'] as String,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: percentage / 100,
+                        backgroundColor: Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(scope['color'] as Color),
+                        minHeight: 4,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 
