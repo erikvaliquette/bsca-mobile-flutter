@@ -6,15 +6,18 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
+
 
 import '../../models/fuel_types.dart';
 import '../../providers/organization_provider.dart';
+import '../../services/background_trip_tracking_service.dart';
 import '../../services/connectivity_service.dart';
+import '../../services/trip_attribution_service.dart';
 import '../../services/location_service.dart';
 import '../../services/travel_emissions_service.dart';
 import '../../widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
+import 'trip_reconciliation_screen.dart';
 
 class TravelEmissionsScreen extends HookWidget {
   const TravelEmissionsScreen({Key? key}) : super(key: key);
@@ -342,7 +345,7 @@ class TravelEmissionsScreen extends HookWidget {
                               }
                             }
                             
-                            // Update trip in database
+                            // Update trip in database (excluding organization_id as travel_trips table doesn't have this column)
                             await TravelEmissionsService.instance.updateTrip(
                               trip.id!,
                               {
@@ -351,8 +354,8 @@ class TravelEmissionsScreen extends HookWidget {
                                 'emissions': newEmissions,
                                 if (FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': dialogFuelType,
                                 if (!FuelTypes.requiresFuelType(dialogMode)) 'fuel_type': null,
-                                if (selectedOrganizationId != null) 'organization_id': selectedOrganizationId,
-                                if (dialogPurpose != 'Business') 'organization_id': null, // Clear organization if not business
+                                // Note: organization_id is NOT saved to travel_trips table
+                                // Organization attribution is handled separately via organization_carbon_footprint table
                               },
                             );
                             
@@ -405,10 +408,8 @@ class TravelEmissionsScreen extends HookWidget {
     final selectedMode = useState('car');
     final selectedFuelType = useState<String?>(FuelTypes.getDefaultFuelType('car'));
     final selectedPurpose = useState('commute');
-    final currentTrip = useState<TripData?>(null);
-    final lastPosition = useState<Position?>(null);
-    final positionStream = useState<Stream<Position>?>(null);
-    final positionStreamSubscription = useState<StreamSubscription<Position>?>(null);
+    final currentTrip = useState<TripData?>(BackgroundTripTrackingService.instance.currentTrip);
+    final lastPosition = useState<Position?>(BackgroundTripTrackingService.instance.lastPosition);
     final connectivitySubscription = useState<StreamSubscription<bool>?>(null);
     final showTripDetails = useState(false);
     final selectedTrip = useState<TripData?>(null);
@@ -456,7 +457,7 @@ class TravelEmissionsScreen extends HookWidget {
       return result;
     }, [trips.value]);
     
-    // Load user trips on init and set up connectivity listener
+    // Load user trips on init and set up connectivity and background service listeners
     useEffect(() {
       // Initial load of user trips
       loadUserTrips(isLoading, trips, totalEmissions);
@@ -486,121 +487,36 @@ class TravelEmissionsScreen extends HookWidget {
         }
       });
       
+      // Listen to background service state changes
+      final currentTripSubscription = BackgroundTripTrackingService.instance.currentTripStream.listen((trip) {
+        currentTrip.value = trip;
+      });
+      
+      final isTrackingSubscription = BackgroundTripTrackingService.instance.isTrackingStream.listen((tracking) {
+        isTracking.value = tracking;
+      });
+      
+      final lastPositionSubscription = BackgroundTripTrackingService.instance.lastPositionStream.listen((position) {
+        lastPosition.value = position;
+      });
+      
+      // Initialize tracking state from background service
+      isTracking.value = BackgroundTripTrackingService.instance.isTracking;
+      
       return () {
         connectivitySubscription.value?.cancel();
+        currentTripSubscription.cancel();
+        isTrackingSubscription.cancel();
+        lastPositionSubscription.cancel();
       };
     }, []);
     
     // Clean up position stream and connectivity subscription when widget is disposed
     useEffect(() {
       return () async {
-        await positionStreamSubscription.value?.cancel();
         await connectivitySubscription.value?.cancel();
       };
     }, []);
-    
-    // Update trip with new position
-    void updateTripWithNewPosition(
-      Position position,
-      ValueNotifier<Position?> lastPosition,
-      ValueNotifier<TripData?> currentTrip,
-      ValueNotifier<String> selectedMode,
-      ValueNotifier<String?> selectedFuelType,
-    ) {
-      if (lastPosition.value == null || currentTrip.value == null) return;
-      
-      // Calculate distance between last position and current position
-      final distanceInMeters = Geolocator.distanceBetween(
-        lastPosition.value!.latitude,
-        lastPosition.value!.longitude,
-        position.latitude,
-        position.longitude,
-      );
-      
-      // Convert to kilometers
-      final distanceInKm = distanceInMeters / 1000;
-      
-      // Update trip distance
-      final newDistance = currentTrip.value!.distance + distanceInKm;
-      
-      // Calculate emissions based on mode and distance
-      final emissionFactor = FuelTypes.getEmissionFactor(
-        selectedMode.value,
-        selectedFuelType.value,
-      );
-      final newEmissions = newDistance * emissionFactor;
-      
-      // Check if this is the first meaningful movement (save trip to database)
-      final isTemporaryTrip = currentTrip.value!.id!.startsWith('temp_');
-      final hasMinimumDistance = newDistance >= 0.01; // 10 meters
-      
-      if (isTemporaryTrip && hasMinimumDistance) {
-        // Save trip to database now that we have meaningful movement
-        final tripToSave = currentTrip.value!.copyWith(
-          id: null, // Remove temp ID so database can generate real ID
-          distance: newDistance,
-          emissions: newEmissions,
-        );
-        
-        TravelEmissionsService.instance.createTrip(tripToSave).then((savedTrip) {
-          if (savedTrip != null) {
-            // Update current trip with real database ID
-            currentTrip.value = savedTrip.copyWith(
-              distance: newDistance,
-              emissions: newEmissions,
-            );
-            debugPrint('Trip saved to database with ID: ${savedTrip.id}');
-          }
-        }).catchError((error) {
-          debugPrint('Error saving trip to database: $error');
-        });
-      } else if (!isTemporaryTrip) {
-        // Update existing trip in database
-        TravelEmissionsService.instance.updateTrip(
-          currentTrip.value!.id!,
-          {
-            'distance': newDistance,
-            'emissions': newEmissions,
-          },
-        ).catchError((error) {
-          debugPrint('Error updating trip: $error');
-          // Continue tracking even if there's an error updating the trip
-        });
-      }
-      
-      // Only save location points if trip is saved in database (not temporary)
-      if (!currentTrip.value!.id!.startsWith('temp_')) {
-        TravelEmissionsService.instance.addLocationPoint(
-          LocationPoint(
-            tripId: currentTrip.value!.id!,
-            latitude: position.latitude,
-            longitude: position.longitude,
-            timestamp: DateTime.now().toIso8601String(),
-            altitude: position.altitude,
-            speed: position.speed,
-          ),
-        ).catchError((error) {
-          debugPrint('Error adding location point: $error');
-          // Continue tracking even if there's an error saving the location point
-        });
-      }
-      
-      // Update current trip
-      currentTrip.value = TripData(
-        id: currentTrip.value!.id,
-        userId: currentTrip.value!.userId,
-        startTime: currentTrip.value!.startTime,
-        endTime: currentTrip.value!.endTime,
-        distance: newDistance,
-        mode: currentTrip.value!.mode,
-        fuelType: currentTrip.value!.fuelType,
-        emissions: newEmissions,
-        isActive: true,
-        purpose: currentTrip.value!.purpose,
-        startLocation: currentTrip.value!.startLocation,
-        endLocation: currentTrip.value!.endLocation,
-      );
-    }
     
     // Get emission factor for selected mode and fuel type
     double getEmissionFactor(String mode, String? fuelType) {
@@ -620,7 +536,6 @@ class TravelEmissionsScreen extends HookWidget {
       
       try {
         // Handle location permissions using the LocationService
-        // This will show the necessary dialogs and request permissions if needed
         final permissionGranted = await LocationService.instance.handleLocationPermission(context);
         if (!permissionGranted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -629,25 +544,6 @@ class TravelEmissionsScreen extends HookWidget {
           isLoading.value = false;
           return;
         }
-        
-        // Try to get current position with timeout
-        Position? position;
-        try {
-          position = await LocationService.instance.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high,
-          ).timeout(const Duration(seconds: 15), onTimeout: () {
-            throw TimeoutException('Location request timed out');
-          });
-        } catch (e) {
-          debugPrint('Error getting current position: $e');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to get current location. Please try again.')),
-          );
-          isLoading.value = false;
-          return;
-        }
-        
-        lastPosition.value = position;
         
         // Check connectivity and show appropriate message
         final isConnected = ConnectivityService.instance.isConnected;
@@ -660,50 +556,23 @@ class TravelEmissionsScreen extends HookWidget {
           );
         }
         
-        // Create a new trip with start location
-        final startLocationString = '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
-        
-        final newTrip = TripData(
+        // Start tracking using the background service
+        final success = await BackgroundTripTrackingService.instance.startTracking(
           userId: user.id,
-          startTime: DateTime.now(),
-          distance: 0.0,
           mode: selectedMode.value,
           fuelType: selectedFuelType.value,
-          emissions: 0.0,
-          isActive: true,
           purpose: selectedPurpose.value,
-          startLocation: startLocationString,
         );
         
-        // Don't save trip to database yet - wait for meaningful movement
-        // Keep trip in memory with a temporary local ID
-        final tempTrip = newTrip.copyWith(id: 'temp_${const Uuid().v4()}');
-        currentTrip.value = tempTrip;
-          
-          // Don't save location points yet since trip isn't in database
-          // Location points will be saved when trip gets meaningful movement
-          
-          // Start position stream
-          positionStream.value = LocationService.instance.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
-          );
-          
-          // Listen to position updates
-          positionStreamSubscription.value = positionStream.value?.listen((Position position) {
-            updateTripWithNewPosition(position, lastPosition, currentTrip, selectedMode, selectedFuelType);
-            lastPosition.value = position;
-          });
-          
-          isTracking.value = true;
-          
+        if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Started tracking your ${getTravelModeName(selectedMode.value, travelModes)} journey'),
-            ),
+            const SnackBar(content: Text('Started tracking your journey')),
           );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to start tracking. Please try again.')),
+          );
+        }
       } catch (e) {
         debugPrint('Error starting tracking: $e');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -719,258 +588,127 @@ class TravelEmissionsScreen extends HookWidget {
       isLoading.value = true;
       
       try {
-        // Cancel position stream
-        await positionStreamSubscription.value?.cancel();
-        positionStreamSubscription.value = null;
-        positionStream.value = null;
-        
-        if (currentTrip.value != null) {
-          // Check if trip has meaningful distance (minimum 0.01 km = 10 meters)
-          final minDistance = 0.01; // 10 meters minimum
-          final tripDistance = currentTrip.value!.distance;
+        // Handle organization attribution for business trips
+        String? selectedOrganizationId;
+        if (currentTrip.value?.purpose == 'Business') {
+          final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+          final organizations = organizationProvider.organizations;
           
-          if (tripDistance < minDistance) {
-            // For temporary trips, just discard them. For saved trips, delete from database.
-            if (!currentTrip.value!.id!.startsWith('temp_')) {
-              await TravelEmissionsService.instance.deleteTrip(currentTrip.value!.id!);
-            }
-            
-            currentTrip.value = null;
-            lastPosition.value = null;
-            
+          if (organizations.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No organizations found. Business trip will be saved without organization attribution.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+            selectedOrganizationId = null;
+          } else if (organizations.length == 1) {
+            // Only one organization, use it automatically
+            selectedOrganizationId = organizations.first.id;
+          } else {
+            // Multiple organizations, show selection dialog
+            selectedOrganizationId = await showDialog<String>(
+              context: context,
+              builder: (BuildContext dialogContext) {
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: Text(
+                    'Select Organization',
+                    style: TextStyle(
+                      color: Theme.of(dialogContext).primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Which organization should this business trip be attributed to?',
+                          style: TextStyle(fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: organizations.length,
+                          itemBuilder: (context, index) {
+                            final org = organizations[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Theme.of(dialogContext).primaryColor,
+                                  child: Text(
+                                    org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                title: Text(
+                                  org.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: org.description != null
+                                    ? Text(
+                                        org.description!,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      )
+                                    : null,
+                                onTap: () {
+                                  Navigator.of(dialogContext).pop(org.id);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop(null);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                );
+              },
+            );
+          }
+        }
+        
+        // Stop tracking using the background service
+        final completedTrip = await BackgroundTripTrackingService.instance.stopTracking(
+          selectedOrganizationId: selectedOrganizationId,
+        );
+        
+        if (completedTrip != null) {
+          // Check if trip has meaningful distance
+          if (completedTrip.distance < 0.01) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Trip cancelled - no significant movement detected'),
                 duration: Duration(seconds: 2),
               ),
             );
-            
-            isTracking.value = false;
-            return;
-          }
-          
-          // Check connectivity and show appropriate message
-          final isConnected = ConnectivityService.instance.isConnected;
-          if (!isConnected) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('You are offline. Trip will be saved locally and synced when online.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-          
-          final endTime = DateTime.now();
-          
-          // Add end location if we have a last position
-          String? endLocationString;
-          if (lastPosition.value != null) {
-            endLocationString = '${lastPosition.value!.latitude.toStringAsFixed(6)}, ${lastPosition.value!.longitude.toStringAsFixed(6)}';
-          }
-          
-          // Handle organization attribution for business trips
-          String? selectedOrganizationId;
-          if (currentTrip.value!.purpose == 'Business') {
-            final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
-            final organizations = organizationProvider.organizations;
-            
-            if (organizations.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('No organizations found. Business trip will be saved without organization attribution.'),
-                  duration: Duration(seconds: 3),
-                ),
-              );
-              selectedOrganizationId = null;
-            } else if (organizations.length == 1) {
-              // Only one organization, use it automatically
-              selectedOrganizationId = organizations.first.id;
-            } else {
-              // Multiple organizations, show selection dialog
-              selectedOrganizationId = await showDialog<String>(
-                context: context,
-                builder: (BuildContext dialogContext) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: Text(
-                      'Select Organization',
-                      style: TextStyle(
-                        color: Theme.of(dialogContext).primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    content: SizedBox(
-                      width: double.maxFinite,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Which organization should this business trip be attributed to?',
-                            style: TextStyle(fontSize: 16),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: organizations.length,
-                            itemBuilder: (context, index) {
-                              final org = organizations[index];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Theme.of(dialogContext).primaryColor,
-                                    child: Text(
-                                      org.name.isNotEmpty ? org.name[0].toUpperCase() : 'O',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    org.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  subtitle: org.description != null
-                                      ? Text(
-                                          org.description!,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        )
-                                      : null,
-                                  onTap: () {
-                                    Navigator.of(dialogContext).pop(org.id);
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop(null);
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  );
-                },
-              );
-            }
-          }
-          
-          // Handle temporary trips that need to be saved to database
-          if (currentTrip.value!.id!.startsWith('temp_')) {
-            // Save temporary trip to database
-            final tripToSave = currentTrip.value!.copyWith(
-              id: null, // Remove temp ID
-              endTime: endTime,
-              endLocation: endLocationString,
-              isActive: false,
-              organizationId: selectedOrganizationId,
-            );
-            
-            final savedTrip = await TravelEmissionsService.instance.createTrip(tripToSave);
-            if (savedTrip != null) {
-              currentTrip.value = savedTrip;
-              debugPrint('Temporary trip saved to database with ID: ${savedTrip.id}');
-              
-              // Attribute emissions to organization if this is a business trip
-              if (selectedOrganizationId != null && savedTrip.emissions > 0) {
-                debugPrint('🏢 Attempting to attribute ${savedTrip.emissions} kg CO2e to organization $selectedOrganizationId');
-                try {
-                  final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                    selectedOrganizationId,
-                    savedTrip.emissions,
-                    savedTrip.id!,
-                  );
-                  if (attributionSuccess) {
-                    debugPrint('✅ Successfully attributed emissions to organization');
-                  } else {
-                    debugPrint('⚠️ Failed to attribute emissions to organization');
-                  }
-                } catch (error) {
-                  debugPrint('❌ Exception during emission attribution: $error');
-                }
-              }
-            }
           } else {
-            // Update existing trip in database
-            final updates = {
-              'end_time': endTime.toIso8601String(),
-              'distance': currentTrip.value!.distance,
-              'emissions': currentTrip.value!.emissions,
-              'is_active': false,
-              'fuel_type': currentTrip.value!.fuelType,
-              if (endLocationString != null) 'end_location': endLocationString,
-              if (selectedOrganizationId != null) 'organization_id': selectedOrganizationId,
-            };
+            // Add completed trip to the list and update totals
+            trips.value = [completedTrip, ...trips.value];
+            totalEmissions.value += completedTrip.emissions;
             
-            await TravelEmissionsService.instance.updateTrip(
-              currentTrip.value!.id!,
-              updates,
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Stopped tracking your journey')),
             );
-            
-            // Attribute emissions to organization if this is a business trip
-            if (selectedOrganizationId != null && currentTrip.value!.emissions > 0) {
-              debugPrint('🏢 Attempting to attribute ${currentTrip.value!.emissions} kg CO2e to organization $selectedOrganizationId');
-              try {
-                final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                  selectedOrganizationId,
-                  currentTrip.value!.emissions,
-                  currentTrip.value!.id!,
-                );
-                if (attributionSuccess) {
-                  debugPrint('✅ Successfully attributed emissions to organization');
-                } else {
-                  debugPrint('⚠️ Failed to attribute emissions to organization');
-                }
-              } catch (error) {
-                debugPrint('❌ Exception during emission attribution: $error');
-              }
-            }
           }
-          
-          // Batch sync location points for this trip (only if it was saved in database)
-          if (!currentTrip.value!.id!.startsWith('temp_')) {
-            TravelEmissionsService.instance.syncTripLocationPoints(
-              currentTrip.value!.id!,
-            ).catchError((error) {
-              debugPrint('Error syncing location points: $error');
-              // Continue even if sync fails - points will be synced later
-              return false;
-            });
-          }
-          
-          // Add trip to list
-          final updatedTrip = TripData(
-            id: currentTrip.value!.id,
-            userId: currentTrip.value!.userId,
-            startTime: currentTrip.value!.startTime,
-            endTime: endTime,
-            distance: currentTrip.value!.distance,
-            mode: currentTrip.value!.mode,
-            fuelType: currentTrip.value!.fuelType,
-            emissions: currentTrip.value!.emissions,
-            isActive: false,
-            purpose: currentTrip.value!.purpose,
-            organizationId: selectedOrganizationId,
-          );
-          
-          trips.value = [updatedTrip, ...trips.value];
-          totalEmissions.value += updatedTrip.emissions;
-          
-          currentTrip.value = null;
-          lastPosition.value = null;
-          
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Stopped tracking your journey')),
+            const SnackBar(content: Text('No trip in progress')),
           );
         }
-        
-        isTracking.value = false;
       } catch (e) {
         debugPrint('Error stopping tracking: $e');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -980,11 +718,36 @@ class TravelEmissionsScreen extends HookWidget {
         isLoading.value = false;
       }
     }
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Travel Emissions'),
         actions: [
+          // Menu for additional options
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'reconcile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TripReconciliationScreen(),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem<String>(
+                value: 'reconcile',
+                child: Row(
+                  children: [
+                    Icon(Icons.sync_problem),
+                    SizedBox(width: 8),
+                    Text('Reconcile Orphaned Trips'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           // Connectivity status indicator
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -1421,18 +1184,25 @@ class TravelEmissionsScreen extends HookWidget {
                                             // Update total emissions
                                             totalEmissions.value -= trip.emissions;
                                             
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Trip deleted successfully')),
-                                            );
+                                            // Check if widget is still mounted before showing snackbar
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Trip deleted successfully')),
+                                              );
+                                            }
                                           } else {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Failed to delete trip')),
-                                            );
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Failed to delete trip')),
+                                              );
+                                            }
                                           }
                                         } catch (e) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Error deleting trip: $e')),
-                                          );
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Error deleting trip: $e')),
+                                            );
+                                          }
                                         } finally {
                                           isLoading.value = false;
                                         }
@@ -1629,6 +1399,7 @@ class TravelEmissionsScreen extends HookWidget {
 
   /// Handle emissions reattribution when editing trips
   /// This properly handles de-attribution from old organization and attribution to new organization
+  /// Now uses the junction table for more robust attribution tracking
   Future<void> _handleEmissionsReattribution({
     required TripData originalTrip,
     required String newPurpose,
@@ -1645,18 +1416,62 @@ class TravelEmissionsScreen extends HookWidget {
     debugPrint('   Is Business: $isBusinessTrip (${newEmissions} kg CO2e to org: $newOrganizationId)');
     
     try {
-      // Step 1: Remove old attribution if it was previously a business trip
-      if (wasBusinessTrip && oldOrganizationId != null && oldEmissions > 0) {
-        debugPrint('➖ Removing old attribution: ${oldEmissions} kg CO2e from organization $oldOrganizationId');
-        final deAttributionSuccess = await TravelEmissionsService.instance.deAttributeEmissionsFromOrganization(
-          oldOrganizationId,
-          oldEmissions,
-          originalTrip.id!,
-        );
-        if (deAttributionSuccess) {
-          debugPrint('✅ Successfully removed old attribution');
+      // Step 1: Handle old attribution
+      if (wasBusinessTrip && oldEmissions > 0) {
+        if (oldOrganizationId != null) {
+          // Normal case: remove attribution from known organization
+          debugPrint('➖ Removing old attribution: ${oldEmissions} kg CO2e from organization $oldOrganizationId');
+          
+          // First check if there's an active attribution record in the junction table
+          final attributions = await TripAttributionService.instance.getTripAttributions(originalTrip.id!);
+          final hasActiveAttribution = attributions.any((attr) => attr.organizationId == oldOrganizationId && attr.isActive);
+          
+          if (hasActiveAttribution) {
+            // If there's an active attribution record, deactivate it and update the organization carbon footprint
+            final deAttributionSuccess = await TravelEmissionsService.instance.deAttributeEmissionsFromOrganization(
+              oldOrganizationId,
+              oldEmissions,
+              originalTrip.id!,
+            );
+            
+            if (deAttributionSuccess) {
+              debugPrint('✅ Successfully removed old attribution');
+            } else {
+              debugPrint('⚠️ Failed to remove old attribution');
+            }
+          } else {
+            // No active attribution record found, but we have an organizationId
+            // This is a data inconsistency - log it but continue
+            debugPrint('⚠️ Inconsistency detected: Trip has organizationId but no active attribution record');
+          }
         } else {
-          debugPrint('⚠️ Failed to remove old attribution');
+          // Special case: orphaned business trip (was business but never attributed)
+          debugPrint('🔍 Found orphaned business trip (${oldEmissions} kg CO2e) - was never attributed to an organization');
+          // Orphaned case: check if this trip has any attribution records despite organizationId being null
+          debugPrint('🔍 Checking for orphaned attribution records for trip ${originalTrip.id}');
+          final attributions = await TripAttributionService.instance.getTripAttributions(originalTrip.id!);
+          
+          if (attributions.isNotEmpty) {
+            // Unexpected: We have attribution records despite null organizationId
+            debugPrint('⚠️ Inconsistency detected: Trip has null organizationId but has attribution records');
+            
+            // Deactivate all attribution records for this trip
+            for (final attr in attributions) {
+              await TravelEmissionsService.instance.deAttributeEmissionsFromOrganization(
+                attr.organizationId,
+                attr.emissionsAmount,
+                originalTrip.id!,
+              );
+            }
+            
+            debugPrint('✅ Deactivated all attribution records for orphaned trip');
+          } else {
+            // If it's changing to personal, we don't need to do anything since it was never attributed
+            // If it's staying business but now has an organization, we'll handle that in Step 2
+            if (!isBusinessTrip) {
+              debugPrint('✅ Orphaned business trip changing to personal - no de-attribution needed');
+            }
+          }
         }
       }
       

@@ -4,6 +4,9 @@ import 'package:uuid/uuid.dart';
 import 'dart:collection';
 
 import '../models/local_trip_data.dart';
+import '../models/trip_organization_attribution_model.dart';
+import '../services/trip_attribution_service.dart';
+import '../services/organization_carbon_footprint_service.dart';
 import '../services/supabase/supabase_client.dart';
 import 'connectivity_service.dart';
 import 'local_storage_service.dart';
@@ -135,8 +138,8 @@ class TravelEmissionsService {
       // Update in local storage first
       final updatedLocalTrip = await LocalStorageService.instance.updateTrip(tripId, updates);
       
-      // If online, try to sync with Supabase
-      if (ConnectivityService.instance.isConnected) {
+      // If online and tripId is not a temp ID, try to sync with Supabase
+      if (ConnectivityService.instance.isConnected && !tripId.startsWith('temp_') && !tripId.startsWith('local_')) {
         try {
           await _client
               .from('travel_trips')
@@ -321,15 +324,25 @@ class TravelEmissionsService {
   /// Attribute trip emissions to organization's carbon footprint
   Future<bool> attributeEmissionsToOrganization(String organizationId, double emissions, String tripId) async {
     try {
-      debugPrint('🔄 Starting attribution: $emissions kg CO2e to organization $organizationId for trip $tripId');
-      
+      debugPrint('🔄 Starting attribution: adding $emissions kg CO2e to organization $organizationId for trip $tripId');
       if (!ConnectivityService.instance.isConnected) {
         debugPrint('❌ Offline - organization emissions attribution will be synced later');
         return false;
       }
       
+      // First, create or update the attribution record in the junction table
+      final attributionResult = await TripAttributionService.instance.createTripOrganizationAttribution(
+        tripId, 
+        organizationId, 
+        emissions
+      );
+      
+      if (!attributionResult) {
+        debugPrint('❌ Failed to create attribution record in junction table');
+        return false;
+      }
+      
       debugPrint('🔍 Checking for existing organization carbon footprint record...');
-      // Check if organization carbon footprint record exists
       final existingRecord = await _client
           .from('organization_carbon_footprint')
           .select('id, scope3_business_travel, scope3_total, total_emissions')
@@ -407,6 +420,17 @@ class TravelEmissionsService {
         return false;
       }
       
+      // First, mark any attribution records for this trip and organization as inactive
+      final deactivateResult = await TripAttributionService.instance.deactivateTripOrganizationAttribution(
+        tripId, 
+        organizationId
+      );
+      
+      if (!deactivateResult) {
+        debugPrint('⚠️ No attribution record found to deactivate or deactivation failed');
+        // Continue anyway as we still want to update the organization carbon footprint
+      }
+      
       debugPrint('🔍 Checking for existing organization carbon footprint record...');
       final existingRecord = await _client
           .from('organization_carbon_footprint')
@@ -455,6 +479,43 @@ class TravelEmissionsService {
       debugPrint('❌ Error de-attributing emissions from organization: $e');
       debugPrint('❌ Stack trace: ${StackTrace.current}');
       return false;
+    }
+  }
+
+  /// Get all active attribution records for a trip
+  Future<List<TripOrganizationAttribution>> getTripAttributions(String tripId) async {
+    return await TripAttributionService.instance.getTripAttributions(tripId);
+  }
+
+  /// Reconcile orphaned business trips
+  /// This finds business trips without attribution records and creates them
+  /// Returns the number of trips that were successfully reconciled
+  Future<int> reconcileOrphanedBusinessTrips(String userId, String defaultOrganizationId) async {
+    try {
+      debugPrint('🔄 Starting reconciliation of orphaned business trips');
+      
+      if (!ConnectivityService.instance.isConnected) {
+        debugPrint('❌ Offline - reconciliation will be performed later');
+        return 0;
+      }
+      
+      // Use the TripAttributionService to find and reconcile orphaned trips
+      final reconciled = await TripAttributionService.instance.reconcileOrphanedBusinessTrips(
+        userId,
+        defaultOrganizationId,
+      );
+      
+      if (reconciled > 0) {
+        debugPrint('✅ Successfully reconciled $reconciled orphaned trips');
+        
+        // Note: Organization carbon footprint is updated through the attribution process
+        debugPrint('✅ Reconciled $reconciled trips - carbon footprint updated through attribution records');
+      }
+      
+      return reconciled;
+    } catch (e) {
+      debugPrint('❌ Error reconciling orphaned business trips: $e');
+      return 0;
     }
   }
 }
