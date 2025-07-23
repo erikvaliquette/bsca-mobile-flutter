@@ -356,26 +356,13 @@ class TravelEmissionsScreen extends HookWidget {
                               },
                             );
                             
-                            // Handle organization emissions attribution
-                            if (dialogPurpose == 'Business' && selectedOrganizationId != null && newEmissions > 0) {
-                              // If this was previously a business trip with different organization, we should ideally
-                              // subtract from old organization and add to new one, but for simplicity we'll just add to new
-                              debugPrint('🏢 Attempting to attribute $newEmissions kg CO2e to organization $selectedOrganizationId (from edit)');
-                              try {
-                                final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
-                                  selectedOrganizationId,
-                                  newEmissions,
-                                  trip.id!,
-                                );
-                                if (attributionSuccess) {
-                                  debugPrint('✅ Successfully attributed emissions to organization (from edit)');
-                                } else {
-                                  debugPrint('⚠️ Failed to attribute emissions to organization (from edit)');
-                                }
-                              } catch (error) {
-                                debugPrint('❌ Exception during emission attribution (from edit): $error');
-                              }
-                            }
+                            // Handle organization emissions attribution with proper de-attribution
+                            await _handleEmissionsReattribution(
+                              originalTrip: trip,
+                              newPurpose: dialogPurpose,
+                              newOrganizationId: selectedOrganizationId,
+                              newEmissions: newEmissions,
+                            );
                             
                             // Close the dialog
                             Navigator.of(context).pop();
@@ -1638,6 +1625,72 @@ class TravelEmissionsScreen extends HookWidget {
             )
           : null,
     );
+  }
+
+  /// Handle emissions reattribution when editing trips
+  /// This properly handles de-attribution from old organization and attribution to new organization
+  Future<void> _handleEmissionsReattribution({
+    required TripData originalTrip,
+    required String newPurpose,
+    required String? newOrganizationId,
+    required double newEmissions,
+  }) async {
+    final wasBusinessTrip = originalTrip.purpose == 'Business';
+    final isBusinessTrip = newPurpose == 'Business';
+    final oldOrganizationId = originalTrip.organizationId;
+    final oldEmissions = originalTrip.emissions;
+    
+    debugPrint('🔄 Handling emissions reattribution:');
+    debugPrint('   Was Business: $wasBusinessTrip (${oldEmissions} kg CO2e to org: $oldOrganizationId)');
+    debugPrint('   Is Business: $isBusinessTrip (${newEmissions} kg CO2e to org: $newOrganizationId)');
+    
+    try {
+      // Step 1: Remove old attribution if it was previously a business trip
+      if (wasBusinessTrip && oldOrganizationId != null && oldEmissions > 0) {
+        debugPrint('➖ Removing old attribution: ${oldEmissions} kg CO2e from organization $oldOrganizationId');
+        final deAttributionSuccess = await TravelEmissionsService.instance.deAttributeEmissionsFromOrganization(
+          oldOrganizationId,
+          oldEmissions,
+          originalTrip.id!,
+        );
+        if (deAttributionSuccess) {
+          debugPrint('✅ Successfully removed old attribution');
+        } else {
+          debugPrint('⚠️ Failed to remove old attribution');
+        }
+      }
+      
+      // Step 2: Add new attribution if it's now a business trip
+      if (isBusinessTrip && newOrganizationId != null && newEmissions > 0) {
+        debugPrint('➕ Adding new attribution: ${newEmissions} kg CO2e to organization $newOrganizationId');
+        final attributionSuccess = await TravelEmissionsService.instance.attributeEmissionsToOrganization(
+          newOrganizationId,
+          newEmissions,
+          originalTrip.id!,
+        );
+        if (attributionSuccess) {
+          debugPrint('✅ Successfully added new attribution');
+        } else {
+          debugPrint('⚠️ Failed to add new attribution');
+        }
+      }
+      
+      // Log the final state
+      if (!wasBusinessTrip && !isBusinessTrip) {
+        debugPrint('ℹ️ No attribution changes needed (personal → personal)');
+      } else if (wasBusinessTrip && !isBusinessTrip) {
+        debugPrint('🏠 Trip changed from business to personal - emissions de-attributed');
+      } else if (!wasBusinessTrip && isBusinessTrip) {
+        debugPrint('🏢 Trip changed from personal to business - emissions attributed');
+      } else if (oldOrganizationId == newOrganizationId) {
+        debugPrint('🔄 Same organization, emissions updated from ${oldEmissions} to ${newEmissions} kg CO2e');
+      } else {
+        debugPrint('🔀 Organization transfer completed: $oldOrganizationId → $newOrganizationId');
+      }
+      
+    } catch (error) {
+      debugPrint('❌ Error during emissions reattribution: $error');
+    }
   }
 }
 

@@ -396,6 +396,67 @@ class TravelEmissionsService {
       return false;
     }
   }
+
+  /// De-attribute emissions from an organization's carbon footprint
+  /// This subtracts emissions when a trip changes from business to personal or changes organizations
+  Future<bool> deAttributeEmissionsFromOrganization(String organizationId, double emissions, String tripId) async {
+    try {
+      debugPrint('🔄 Starting de-attribution: removing $emissions kg CO2e from organization $organizationId for trip $tripId');
+      if (!ConnectivityService.instance.isConnected) {
+        debugPrint('❌ Offline - organization emissions de-attribution will be synced later');
+        return false;
+      }
+      
+      debugPrint('🔍 Checking for existing organization carbon footprint record...');
+      final existingRecord = await _client
+          .from('organization_carbon_footprint')
+          .select('id, scope3_business_travel, scope3_total, total_emissions')
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+      
+      debugPrint('📊 Existing record found: ${existingRecord != null}');
+      
+      if (existingRecord != null) {
+        // Update existing record by subtracting emissions
+        final currentBusinessTravel = double.parse(existingRecord['scope3_business_travel']?.toString() ?? '0');
+        final currentScope3Total = double.parse(existingRecord['scope3_total']?.toString() ?? '0');
+        final currentTotalEmissions = double.parse(existingRecord['total_emissions']?.toString() ?? '0');
+        
+        // Calculate new values (ensure they don't go below zero)
+        final newBusinessTravel = (currentBusinessTravel - emissions).clamp(0.0, double.infinity);
+        final newScope3Total = (currentScope3Total - emissions).clamp(0.0, double.infinity);
+        final newTotalEmissions = (currentTotalEmissions - emissions).clamp(0.0, double.infinity);
+        
+        debugPrint('📉 De-attributing from existing record:');
+        debugPrint('   Business Travel: $currentBusinessTravel - $emissions = $newBusinessTravel kg CO2e');
+        debugPrint('   Scope 3 Total: $currentScope3Total - $emissions = $newScope3Total kg CO2e');
+        debugPrint('   Total Emissions: $currentTotalEmissions - $emissions = $newTotalEmissions kg CO2e');
+        
+        final updateResult = await _client
+            .from('organization_carbon_footprint')
+            .update({
+              'scope3_business_travel': newBusinessTravel,
+              'scope3_total': newScope3Total,
+              'total_emissions': newTotalEmissions,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', existingRecord['id'])
+            .select();
+          
+        debugPrint('✅ De-attribution result: $updateResult');
+      } else {
+        debugPrint('⚠️ No existing carbon footprint record found for organization $organizationId - nothing to de-attribute');
+        return false;
+      }
+      
+      debugPrint('🎉 Successfully de-attributed $emissions kg CO2e from organization $organizationId');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error de-attributing emissions from organization: $e');
+      debugPrint('❌ Stack trace: ${StackTrace.current}');
+      return false;
+    }
+  }
 }
 
 /// Data model for a travel trip
