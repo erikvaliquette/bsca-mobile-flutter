@@ -183,29 +183,70 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                       }
                       
                       final connections = provider.filteredConnections;
+                      final pendingRequests = provider.pendingRequests;
                       
-                      if (connections.isEmpty) {
-                        return const Center(
-                          child: Text('No connections found'),
-                        );
-                      }
-                      
-                      return GridView.builder(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16.0,
-                          mainAxisSpacing: 16.0,
-                          childAspectRatio: 0.85,
-                        ),
-                        itemCount: connections.length,
-                        itemBuilder: (context, index) {
-                          return _buildBusinessConnectionCard(
-                            connections[index],
-                            showActions: true,
-                            onDisconnect: () => _handleDisconnect(connections[index]),
-                            onMessage: () => _handleMessage(connections[index]),
-                          );
-                        },
+                      return Column(
+                        children: [
+                          // Pending Connection Requests Section
+                          if (pendingRequests.isNotEmpty) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.orange.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.notifications_active, color: Colors.orange.shade700),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Pending Connection Requests (${pendingRequests.length})',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ...pendingRequests.map((request) => _buildPendingRequestCard(request)),
+                                ],
+                              ),
+                            ),
+                          ],
+                          
+                          // Existing Connections Section
+                          Expanded(
+                            child: connections.isEmpty
+                                ? const Center(
+                                    child: Text('No connections found'),
+                                  )
+                                : GridView.builder(
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 16.0,
+                                      mainAxisSpacing: 16.0,
+                                      childAspectRatio: 0.85,
+                                    ),
+                                    itemCount: connections.length,
+                                    itemBuilder: (context, index) {
+                                      return _buildBusinessConnectionCard(
+                                        connections[index],
+                                        showActions: true,
+                                        onDisconnect: () => _handleDisconnect(connections[index]),
+                                        onMessage: () => _handleMessage(connections[index]),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -532,6 +573,172 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         ),
       );
     }
+  }
+
+  // Build pending connection request card with accept/reject buttons
+  Widget _buildPendingRequestCard(BusinessConnection request) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Row(
+        children: [
+          // Profile Image
+          CircleAvatar(
+            radius: 25,
+            backgroundImage: request.profileImageUrl != null
+                ? NetworkImage(request.profileImageUrl!)
+                : null,
+            backgroundColor: Colors.blue.shade100,
+            child: request.profileImageUrl == null
+                ? Text(
+                    _getInitials(request.name),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          
+          // Request Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  request.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                if (request.title != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    request.title!,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+                if (request.location != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    request.location!,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          
+          // Action Buttons
+          Column(
+            children: [
+              // Accept Button
+              SizedBox(
+                width: 80,
+                height: 32,
+                child: ElevatedButton(
+                  onPressed: () => _handleAcceptRequest(request),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Accept'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              // Reject Button
+              SizedBox(
+                width: 80,
+                height: 32,
+                child: OutlinedButton(
+                  onPressed: () => _handleRejectRequest(request),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('Reject'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Handle accepting a connection request
+  Future<void> _handleAcceptRequest(BusinessConnection request) async {
+    final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+    
+    final success = await provider.acceptConnectionRequest(request.id, request.userId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Connection request from ${request.name} accepted!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to accept connection request'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Handle rejecting a connection request
+  Future<void> _handleRejectRequest(BusinessConnection request) async {
+    final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+    
+    final success = await provider.rejectConnectionRequest(request.id);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Connection request from ${request.name} rejected'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to reject connection request'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Helper method to get initials from name
+  String _getInitials(String name) {
+    List<String> names = name.split(' ');
+    String initials = '';
+    for (String n in names) {
+      if (n.isNotEmpty) {
+        initials += n[0].toUpperCase();
+      }
+    }
+    return initials.length > 2 ? initials.substring(0, 2) : initials;
   }
 
   // Old _buildSDGIcon method removed - now using the reusable SDGIconWidget

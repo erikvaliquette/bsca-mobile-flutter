@@ -423,4 +423,91 @@ class BusinessConnectionProvider extends ChangeNotifier {
       print('Error deleting connection: $e');
     }
   }
+
+  // Accept a connection request and create bi-directional connection
+  Future<bool> acceptConnectionRequest(String connectionId, String requesterId) async {
+    try {
+      final client = SupabaseService.client;
+      final userId = client.auth.currentUser?.id;
+
+      if (userId == null) {
+        debugPrint('User not authenticated for accepting connection');
+        return false;
+      }
+
+      // Update the original request to 'accepted'
+      await client
+          .from('business_connections')
+          .update({'status': 'accepted'})
+          .eq('id', connectionId);
+
+      // Create the reciprocal connection (bi-directional)
+      await client
+          .from('business_connections')
+          .insert({
+            'user_id': userId,
+            'counterparty_id': requesterId,
+            'status': 'accepted',
+            'relationship_type': 'professional',
+          });
+
+      // Remove from pending requests
+      _pendingRequests.removeWhere((request) => request.id == connectionId);
+      
+      // Update notification badge
+      if (_notificationProvider != null) {
+        _notificationProvider!.decrementContactRequestCount();
+      }
+      
+      // Refresh connections and discover profiles
+      await fetchConnections();
+      await fetchDiscoverProfiles();
+      
+      notifyListeners();
+      debugPrint('✅ Connection request accepted and bi-directional connection created');
+      return true;
+      
+    } catch (e) {
+      debugPrint('❌ Error accepting connection request: $e');
+      return false;
+    }
+  }
+
+  // Reject a connection request
+  Future<bool> rejectConnectionRequest(String connectionId) async {
+    try {
+      final client = SupabaseService.client;
+      final userId = client.auth.currentUser?.id;
+
+      if (userId == null) {
+        debugPrint('User not authenticated for rejecting connection');
+        return false;
+      }
+
+      // Update the request status to 'rejected'
+      await client
+          .from('business_connections')
+          .update({'status': 'rejected'})
+          .eq('id', connectionId);
+
+      // Remove from pending requests
+      _pendingRequests.removeWhere((request) => request.id == connectionId);
+      
+      // Update notification badge
+      if (_notificationProvider != null) {
+        _notificationProvider!.decrementContactRequestCount();
+      }
+      
+      // Refresh discover profiles to show the user again
+      await fetchDiscoverProfiles();
+      
+      notifyListeners();
+      debugPrint('❌ Connection request rejected');
+      return true;
+      
+    } catch (e) {
+      debugPrint('❌ Error rejecting connection request: $e');
+      return false;
+    }
+  }
 }
