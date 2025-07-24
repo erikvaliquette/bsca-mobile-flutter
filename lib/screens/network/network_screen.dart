@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/business_connection_model.dart';
 import '../../providers/business_connection_provider.dart';
+import '../../services/notifications/notification_provider.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../utils/sdg_icons.dart';
 import '../../widgets/sdg_icon_widget.dart';
+import 'user_profile_screen.dart';
 
 class NetworkScreen extends StatefulWidget {
   const NetworkScreen({super.key});
@@ -26,8 +28,16 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     // Fetch connections when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
       provider.fetchConnections();
       provider.fetchDiscoverProfiles();
+      
+      // Fetch pending contact requests to update notification badges
+      provider.fetchPendingRequests();
+      
+      // Clear contact request notifications when user views the network screen
+      notificationProvider.clearContactRequestNotifications();
       
       // Listen for tab changes to refresh data if needed
       _tabController.addListener(() {
@@ -36,6 +46,8 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         } else if (_tabController.index == 1) {
           provider.fetchDiscoverProfiles();
         }
+        // Trigger rebuild to show/hide + button
+        setState(() {});
       });
     });
   }
@@ -54,6 +66,9 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         title: const Text('Network'),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Theme.of(context).colorScheme.primary,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Theme.of(context).colorScheme.primary,
           tabs: const [
             Tab(text: 'My Connections'),
             Tab(text: 'Discover'),
@@ -308,6 +323,21 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     }
   }
   
+
+  
+  // Handle profile view action
+  void _handleViewProfile(BusinessConnection profile, {bool showConnectButton = false}) {
+    print('_handleViewProfile called for: ${profile.name}');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          profile: profile,
+          showConnectButton: showConnectButton,
+        ),
+      ),
+    );
+  }
+  
   Widget _buildBusinessConnectionCard(
     BusinessConnection connection, {
     bool isDiscover = false,
@@ -330,9 +360,15 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         borderRadius: BorderRadius.circular(12.0),
       ),
       color: avatarColor,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
+      child: InkWell(
+        onTap: () {
+          print('Profile card tapped: ${connection.name}');
+          _handleViewProfile(connection, showConnectButton: isDiscover);
+        },
+        borderRadius: BorderRadius.circular(12.0),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
           // Avatar (either image or text)
           Positioned(
             top: 20,
@@ -416,25 +452,86 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
               ),
             ),
           
-          // Connect button for discover profiles
-          if (isDiscover && onConnect != null)
+          // Connection status button for discover profiles (positioned in top-right)
+          if (isDiscover)
             Positioned(
-              bottom: 70,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.person_add, size: 16),
-                label: const Text('Connect'),
-                onPressed: onConnect,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.blue,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-              ),
+              top: 8,
+              right: 8,
+              child: _buildConnectionStatusWidget(connection, onConnect),
             ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  // Build connection status widget based on current connection state
+  Widget _buildConnectionStatusWidget(BusinessConnection connection, VoidCallback? onConnect) {
+    final status = connection.status;
+    
+    if (status == 'pending') {
+      // Show "Request Sent" for pending connections
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade300),
+        ),
+        child: const Text(
+          'Request Sent',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange,
+          ),
+        ),
+      );
+    } else if (status == 'accepted') {
+      // Show "Connected" for accepted connections (shouldn't appear in discover but just in case)
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.green.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.shade300),
+        ),
+        child: const Text(
+          'Connected',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Colors.green,
+          ),
+        ),
+      );
+    } else {
+      // Show + button for no connection or rejected connections
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: IconButton(
+          icon: const Icon(Icons.add, color: Colors.blue),
+          onPressed: () {
+            print('+ button tapped on profile card: ${connection.name}');
+            onConnect?.call();
+          },
+          iconSize: 20,
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(),
+          tooltip: 'Send Connection Request',
+        ),
+      );
+    }
   }
 
   // Old _buildSDGIcon method removed - now using the reusable SDGIconWidget

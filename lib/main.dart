@@ -40,14 +40,26 @@ void main() async {
   final notificationProvider = NotificationProvider();
   await notificationProvider.initialize();
   
+  // Initialize message provider and connect it to notification provider
+  final messageProvider = MessageProvider();
+  messageProvider.setNotificationProvider(notificationProvider);
+  
+  // Initialize business connection provider and connect it to notification provider
+  final businessConnectionProvider = BusinessConnectionProvider();
+  businessConnectionProvider.setNotificationProvider(notificationProvider);
+  
+  // Initialize organization provider and connect it to notification provider
+  final organizationProvider = OrganizationProvider();
+  organizationProvider.setNotificationProvider(notificationProvider);
+  
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => MessageProvider()),
+        ChangeNotifierProvider.value(value: messageProvider),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
-        ChangeNotifierProvider(create: (_) => BusinessConnectionProvider()),
-        ChangeNotifierProvider(create: (_) => OrganizationProvider()),
+        ChangeNotifierProvider.value(value: businessConnectionProvider),
+        ChangeNotifierProvider.value(value: organizationProvider),
         ChangeNotifierProvider.value(value: notificationProvider),
       ],
       child: const BscaApp(),

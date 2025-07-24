@@ -75,6 +75,44 @@ class _NotificationTestScreenState extends State<NotificationTestScreen> {
               child: const Text('Clear All Notifications'),
             ),
             
+            const SizedBox(height: 24),
+            
+            // Badge Management Tests
+            const Text(
+              'Badge Management Tests',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Message badge management
+            _buildBadgeManagementRow(
+              'Messages',
+              () => notificationProvider.incrementMessageCount(),
+              () => notificationProvider.decrementMessageCount(),
+              () => notificationProvider.resetMessageCount(),
+            ),
+            const SizedBox(height: 8),
+            
+            // Contact request badge management
+            _buildBadgeManagementRow(
+              'Contact Requests',
+              () => notificationProvider.incrementContactRequestCount(),
+              () => notificationProvider.decrementContactRequestCount(),
+              () => notificationProvider.resetContactRequestCount(),
+            ),
+            const SizedBox(height: 8),
+            
+            // Organization badge management
+            _buildBadgeManagementRow(
+              'Organization',
+              () => notificationProvider.incrementOrganizationCount(),
+              () => notificationProvider.decrementOrganizationCount(),
+              () => notificationProvider.resetOrganizationCount(),
+            ),
+            
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 16),
@@ -153,6 +191,57 @@ class _NotificationTestScreenState extends State<NotificationTestScreen> {
         content: Text('Organization notification sent'),
         duration: Duration(seconds: 1),
       ),
+    );
+  }
+  
+  Widget _buildBadgeManagementRow(
+    String title,
+    VoidCallback onIncrement,
+    VoidCallback onDecrement,
+    VoidCallback onReset,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Increment button
+        ElevatedButton(
+          onPressed: onIncrement,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(40, 32),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Icon(Icons.add, size: 16),
+        ),
+        const SizedBox(width: 4),
+        // Decrement button
+        ElevatedButton(
+          onPressed: onDecrement,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(40, 32),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Icon(Icons.remove, size: 16),
+        ),
+        const SizedBox(width: 4),
+        // Reset button
+        OutlinedButton(
+          onPressed: onReset,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(50, 32),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Text('Reset', style: TextStyle(fontSize: 12)),
+        ),
+      ],
     );
   }
   

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:realtime_client/realtime_client.dart';
 import '../models/message_model.dart';
 import '../models/chat_room_model.dart';
+import '../services/notifications/notification_provider.dart';
 
 class MessageProvider extends ChangeNotifier {
   final List<MessageModel> _messages = [];
@@ -13,6 +14,9 @@ class MessageProvider extends ChangeNotifier {
   RealtimeChannel? _messagesChannel;
   RealtimeChannel? _typingChannel;
   final List<RealtimeChannel> _channels = []; // List to store additional realtime channels
+  
+  // Notification provider reference for badge updates
+  NotificationProvider? _notificationProvider;
 
   // Getters
   List<MessageModel> get messages => _messages;
@@ -22,6 +26,11 @@ class MessageProvider extends ChangeNotifier {
 
   // Initialize the provider
   bool _isInitialized = false;
+  
+  // Set notification provider reference for badge updates
+  void setNotificationProvider(NotificationProvider notificationProvider) {
+    _notificationProvider = notificationProvider;
+  }
   
   // Helper method to check if a room ID is valid
   bool _isValidRoomId(dynamic roomId) {
@@ -1265,6 +1274,12 @@ class MessageProvider extends ChangeNotifier {
               updatedAt: DateTime.now(),
             );
             
+            // Increment notification badge for new inbound message in new room
+            if (newMessage.senderId != user.id && _notificationProvider != null) {
+              _notificationProvider!.incrementMessageCount();
+              debugPrint('📱 Incremented message notification badge for new room');
+            }
+            
             debugPrint('Created virtual chat room: ${newRoom.name} with ID: ${newRoom.roomId}');
             
             // Add to the beginning of the chat rooms list
@@ -1309,6 +1324,12 @@ class MessageProvider extends ChangeNotifier {
         if (newMessage.senderId != user.id && newMessage.read != true) {
           newUnreadCount += 1;
           debugPrint('Incrementing unread count to $newUnreadCount');
+          
+          // Increment notification badge for new inbound message
+          if (_notificationProvider != null) {
+            _notificationProvider!.incrementMessageCount();
+            debugPrint('📱 Incremented message notification badge');
+          }
         }
         
         _chatRooms[roomIndex] = room.copyWith(

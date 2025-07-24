@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bsca_mobile_flutter/models/organization_model.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
+import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
 import 'package:bsca_mobile_flutter/screens/organization/organization_profile_screen.dart';
 
 class OrganizationScreen extends StatefulWidget {
@@ -16,9 +17,19 @@ class _OrganizationScreenState extends State<OrganizationScreen> {
   void initState() {
     super.initState();
     // Fetch organization data when the screen loads
-    Future.microtask(() =>
-        Provider.of<OrganizationProvider>(context, listen: false)
-            .fetchCurrentUserOrganization());
+    Future.microtask(() async {
+      final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
+      // Fetch organization data
+      await organizationProvider.fetchCurrentUserOrganization();
+      
+      // Fetch pending validation requests to update notification badges
+      await organizationProvider.fetchPendingValidationRequests();
+      
+      // Clear organization notifications when user views the organization screen
+      notificationProvider.clearOrganizationNotifications();
+    });
   }
 
   @override

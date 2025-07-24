@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../providers/message_provider.dart';
 import '../../providers/business_connection_provider.dart';
+import '../../services/notifications/notification_provider.dart';
 import '../../models/chat_room_model.dart';
 import '../../models/business_connection_model.dart';
 import 'conversation_screen.dart';
@@ -30,9 +31,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     // This ensures we refresh the chat list when returning to this screen
     if (_isInitialized) {
       final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      
       // Force a full refresh of chat rooms and subscriptions
       messageProvider.refreshChatRooms();
-      debugPrint('ChatListScreen: Refreshed chat rooms and subscriptions');
+      
+      // Clear message notifications when user views the chat list
+      notificationProvider.clearMessageNotifications();
+      
+      debugPrint('ChatListScreen: Refreshed chat rooms and cleared message notifications');
     }
   }
 

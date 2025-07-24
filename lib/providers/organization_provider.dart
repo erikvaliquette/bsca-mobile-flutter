@@ -2,12 +2,68 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/organization_model.dart';
 import '../services/organization_service.dart';
+import '../services/validation_service.dart';
+import '../services/notifications/notification_provider.dart';
+import '../models/organization_membership_model.dart';
 
 class OrganizationProvider with ChangeNotifier {
   List<Organization> _organizations = [];
   Organization? _selectedOrganization;
   bool _isLoading = false;
   String? _error;
+  
+  // Notification provider reference for badge updates
+  NotificationProvider? _notificationProvider;
+  
+  // Pending validation requests for organizations where user is admin
+  List<OrganizationMembership> _pendingValidationRequests = [];
+  List<OrganizationMembership> get pendingValidationRequests => _pendingValidationRequests;
+  
+  // Set notification provider reference for badge updates
+  void setNotificationProvider(NotificationProvider notificationProvider) {
+    _notificationProvider = notificationProvider;
+  }
+  
+  // Fetch pending validation requests for organizations where user is admin
+  Future<void> fetchPendingValidationRequests() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('User not authenticated for fetching validation requests');
+        return;
+      }
+
+      List<OrganizationMembership> allPendingRequests = [];
+      
+      // For each organization where user is admin, fetch pending validation requests
+      for (final org in _organizations) {
+        try {
+          final requests = await ValidationService.instance.getPendingValidationRequests(
+            organizationId: org.id,
+            adminUserId: userId,
+          );
+          allPendingRequests.addAll(requests);
+        } catch (e) {
+          debugPrint('Error fetching validation requests for org ${org.id}: $e');
+        }
+      }
+
+      // Update notification badge if there are new validation requests
+      if (allPendingRequests.length > _pendingValidationRequests.length && _notificationProvider != null) {
+        final badgeIncrement = allPendingRequests.length - _pendingValidationRequests.length;
+        for (int i = 0; i < badgeIncrement; i++) {
+          _notificationProvider!.incrementOrganizationCount();
+        }
+        debugPrint('📱 Incremented organization validation badge by $badgeIncrement');
+      }
+
+      _pendingValidationRequests = allPendingRequests;
+      debugPrint('Fetched ${allPendingRequests.length} pending validation requests across all organizations');
+      
+    } catch (e) {
+      debugPrint('Error fetching pending validation requests: $e');
+    }
+  }
 
   List<Organization> get organizations => _organizations;
   Organization? get selectedOrganization => _selectedOrganization;

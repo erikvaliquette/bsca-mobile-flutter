@@ -16,6 +16,75 @@ class NotificationProvider extends ChangeNotifier {
   int get organizationCount => _notificationService.organizationCount;
   int get totalCount => _notificationService.totalCount;
   
+  // Badge management methods
+  void incrementMessageCount() {
+    _notificationService.incrementMessageCount();
+    notifyListeners();
+  }
+  
+  void incrementContactRequestCount() {
+    _notificationService.incrementContactRequestCount();
+    notifyListeners();
+  }
+  
+  void incrementOrganizationCount() {
+    _notificationService.incrementOrganizationCount();
+    notifyListeners();
+  }
+  
+  void decrementMessageCount() {
+    _notificationService.decrementMessageCount();
+    notifyListeners();
+  }
+  
+  void decrementContactRequestCount() {
+    _notificationService.decrementContactRequestCount();
+    notifyListeners();
+  }
+  
+  void decrementOrganizationCount() {
+    _notificationService.decrementOrganizationCount();
+    notifyListeners();
+  }
+  
+  void resetMessageCount() {
+    _notificationService.resetMessageCount();
+    notifyListeners();
+  }
+  
+  void resetContactRequestCount() {
+    _notificationService.resetContactRequestCount();
+    notifyListeners();
+  }
+  
+  void resetOrganizationCount() {
+    _notificationService.resetOrganizationCount();
+    notifyListeners();
+  }
+  
+  void clearAllBadges() {
+    _notificationService.clearAllBadges();
+    notifyListeners();
+  }
+  
+  // Convenience methods for clearing specific notification types
+  void clearMessageNotifications() {
+    resetMessageCount();
+  }
+  
+  void clearContactRequestNotifications() {
+    resetContactRequestCount();
+  }
+  
+  void clearOrganizationNotifications() {
+    resetOrganizationCount();
+  }
+  
+  // Alias for clearAllBadges for backward compatibility
+  void clearAllNotifications() {
+    clearAllBadges();
+  }
+  
   // Initialize the notification provider
   Future<void> initialize() async {
     // Initialize the notification service
@@ -282,29 +351,7 @@ class NotificationProvider extends ChangeNotifier {
         });
   }
   
-  // Clear message notifications
-  Future<void> clearMessageNotifications() async {
-    await _notificationService.clearMessageNotifications();
-    notifyListeners();
-  }
-  
-  // Clear contact request notifications
-  Future<void> clearContactRequestNotifications() async {
-    await _notificationService.clearContactRequestNotifications();
-    notifyListeners();
-  }
-  
-  // Clear organization notifications
-  Future<void> clearOrganizationNotifications() async {
-    await _notificationService.clearOrganizationNotifications();
-    notifyListeners();
-  }
-  
-  // Clear all notifications
-  Future<void> clearAllNotifications() async {
-    await _notificationService.clearAllNotifications();
-    notifyListeners();
-  }
+
   
   // Public methods for testing notifications
   void testMessageNotification() {

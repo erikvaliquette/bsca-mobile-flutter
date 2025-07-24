@@ -53,6 +53,45 @@ class NotificationService {
   void incrementOrganizationCount() {
     _organizationCount++;
   }
+  
+  // Badge count decrement methods
+  void decrementMessageCount() {
+    if (_messageCount > 0) {
+      _messageCount--;
+    }
+  }
+  
+  void decrementContactRequestCount() {
+    if (_contactRequestCount > 0) {
+      _contactRequestCount--;
+    }
+  }
+  
+  void decrementOrganizationCount() {
+    if (_organizationCount > 0) {
+      _organizationCount--;
+    }
+  }
+  
+  // Badge count reset methods
+  void resetMessageCount() {
+    _messageCount = 0;
+  }
+  
+  void resetContactRequestCount() {
+    _contactRequestCount = 0;
+  }
+  
+  void resetOrganizationCount() {
+    _organizationCount = 0;
+  }
+  
+  // Clear all badge counts
+  void clearAllBadges() {
+    _messageCount = 0;
+    _contactRequestCount = 0;
+    _organizationCount = 0;
+  }
 
   // Initialize notifications
   Future<void> init() async {
