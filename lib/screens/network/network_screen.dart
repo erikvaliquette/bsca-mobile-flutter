@@ -23,7 +23,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     
     // Fetch connections when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -43,8 +43,12 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
       _tabController.addListener(() {
         if (_tabController.index == 0) {
           provider.fetchConnections();
+          provider.fetchPendingRequests(); // Fetch pending requests for My Connections tab
         } else if (_tabController.index == 1) {
           provider.fetchDiscoverProfiles();
+        } else if (_tabController.index == 2) {
+          provider.fetchSentInvitations();
+          provider.fetchReceivedInvitations();
         }
         // Trigger rebuild to show/hide + button
         setState(() {});
@@ -72,6 +76,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
           tabs: const [
             Tab(text: 'My Connections'),
             Tab(text: 'Discover'),
+            Tab(text: 'Invitations'),
           ],
         ),
       ),
@@ -303,6 +308,108 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                       );
                     },
                   ),
+                  
+                  // Invitations Tab
+                  Consumer<BusinessConnectionProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      return SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Sent Invitations Section
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
+                              child: Text(
+                                'Sent Invitations',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            provider.sentInvitations.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.only(bottom: 24.0),
+                                    child: Text('No sent invitations'),
+                                  )
+                                : ListView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: provider.sentInvitations.length,
+                                    itemBuilder: (context, index) {
+                                      final invitation = provider.sentInvitations[index];
+                                      return ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor: Colors.blue.shade200,
+                                          backgroundImage: invitation.profileImageUrl != null && invitation.profileImageUrl!.isNotEmpty
+                                            ? NetworkImage(invitation.profileImageUrl!)
+                                            : null,
+                                          child: (invitation.profileImageUrl == null || invitation.profileImageUrl!.isEmpty)
+                                            ? Text(_getInitials(invitation.name))
+                                            : null,
+                                        ),
+                                        title: Text(invitation.name),
+                                        subtitle: Text('${invitation.organization ?? 'No organization'} • ${invitation.title ?? 'No title'}'),
+                                        trailing: const Chip(
+                                          label: Text('Pending'),
+                                          backgroundColor: Colors.amber,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  
+                            const Divider(height: 32),
+                            
+                            // Received Invitations Section
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
+                              child: Text(
+                                'Received Invitations',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            provider.receivedInvitations.isEmpty
+                                ? const Text('No received invitations')
+                                : ListView.builder(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    itemCount: provider.receivedInvitations.length,
+                                    itemBuilder: (context, index) {
+                                      final invitation = provider.receivedInvitations[index];
+                                      return ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor: Colors.blue.shade200,
+                                          backgroundImage: invitation.profileImageUrl != null && invitation.profileImageUrl!.isNotEmpty
+                                            ? NetworkImage(invitation.profileImageUrl!)
+                                            : null,
+                                          child: (invitation.profileImageUrl == null || invitation.profileImageUrl!.isEmpty)
+                                            ? Text(_getInitials(invitation.name))
+                                            : null,
+                                        ),
+                                        title: Text(invitation.name),
+                                        subtitle: Text('${invitation.organization ?? 'No organization'} • ${invitation.title ?? 'No title'}'),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.check_circle, color: Colors.green),
+                                              onPressed: () => _handleAcceptRequest(invitation),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.cancel, color: Colors.red),
+                                              onPressed: () => _handleRejectRequest(invitation),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -509,6 +616,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
   // Build connection status widget based on current connection state
   Widget _buildConnectionStatusWidget(BusinessConnection connection, VoidCallback? onConnect) {
     final status = connection.status;
+    print('🎯 _buildConnectionStatusWidget for ${connection.name}: status="$status"');
     
     if (status == 'pending') {
       // Show "Request Sent" for pending connections
