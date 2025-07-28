@@ -35,6 +35,8 @@ class AuthProvider extends ChangeNotifier {
           case AuthChangeEvent.userUpdated:
           case AuthChangeEvent.tokenRefreshed:
             _user = session?.user;
+            // Notify listeners that auth state changed to trigger notification refresh
+            notifyListeners();
             break;
           case AuthChangeEvent.signedOut:
           case AuthChangeEvent.userDeleted:
@@ -94,6 +96,8 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+
 
   Future<void> signOut() async {
     _isLoading = true;

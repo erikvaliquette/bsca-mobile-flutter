@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:bsca_mobile_flutter/screens/profile/profile_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dart';
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
@@ -6,9 +7,28 @@ import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
 import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/more/notification_test_screen.dart';
+import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
+import 'package:bsca_mobile_flutter/widgets/notification_badge.dart';
+import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 
-class MoreScreen extends StatelessWidget {
+class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
+
+  @override
+  State<MoreScreen> createState() => _MoreScreenState();
+
+}
+
+class _MoreScreenState extends State<MoreScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch pending validation requests when screen loads
+    Future.microtask(() {
+      final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+      organizationProvider.fetchPendingValidationRequests();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,10 +53,18 @@ class MoreScreen extends StatelessWidget {
       MoreMenuItem(
         title: 'Organization',
         icon: Icons.business,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const OrganizationScreen()),
-        ),
+        onTap: () {
+          // Clear organization notifications when navigating to the Organization screen
+          final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+          notificationProvider.clearOrganizationNotifications();
+          
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const OrganizationScreen()),
+          );
+        },
+        hasNotificationBadge: true,
+        notificationType: NotificationType.organization,
       ),
       MoreMenuItem(
         title: 'SDG Marketplace',
@@ -82,26 +110,37 @@ class MoreScreen extends StatelessWidget {
         itemCount: menuItems.length,
         itemBuilder: (context, index) {
           final item = menuItems[index];
+          Widget listTile = ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+            leading: Icon(
+              item.icon,
+              size: 28.0,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            title: Text(
+              item.title,
+              style: const TextStyle(
+                fontSize: 18.0,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16.0),
+            onTap: item.onTap,
+          );
+          
+          // Wrap with notification badge if needed
+          if (item.hasNotificationBadge && item.notificationType != null) {
+            // Apply the notification badge with the specified type
+            listTile = NotificationBadge(
+              type: item.notificationType!,
+              child: listTile,
+            );
+          }
+          
           return Card(
             margin: const EdgeInsets.only(bottom: 16.0),
             elevation: 2.0,
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-              leading: Icon(
-                item.icon,
-                size: 28.0,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              title: Text(
-                item.title,
-                style: const TextStyle(
-                  fontSize: 18.0,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16.0),
-              onTap: item.onTap,
-            ),
+            child: listTile,
           );
         },
       ),
@@ -122,11 +161,15 @@ class MoreMenuItem {
   final String title;
   final IconData icon;
   final VoidCallback onTap;
+  final bool hasNotificationBadge;
+  final NotificationType? notificationType;
 
   MoreMenuItem({
     required this.title,
     required this.icon,
     required this.onTap,
+    this.hasNotificationBadge = false,
+    this.notificationType,
   });
 }
 

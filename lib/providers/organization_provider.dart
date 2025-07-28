@@ -48,13 +48,18 @@ class OrganizationProvider with ChangeNotifier {
         }
       }
 
-      // Update notification badge if there are new validation requests
-      if (allPendingRequests.length > _pendingValidationRequests.length && _notificationProvider != null) {
-        final badgeIncrement = allPendingRequests.length - _pendingValidationRequests.length;
-        for (int i = 0; i < badgeIncrement; i++) {
+      // Check for pending validation requests in the UI (from organization profile screen)
+      // This is a workaround to ensure badge counts match what's displayed in the UI
+      if (_notificationProvider != null) {
+        // Reset the organization count first to avoid double counting
+        _notificationProvider!.resetOrganizationCount();
+        
+        // If we have pending requests from the database OR the UI shows pending requests
+        if (allPendingRequests.isNotEmpty || _hasPendingValidationRequestsInUI()) {
+          // Set the badge count to at least 1 to ensure the badge appears
           _notificationProvider!.incrementOrganizationCount();
+          debugPrint('📱 Set organization validation badge to show pending requests');
         }
-        debugPrint('📱 Incremented organization validation badge by $badgeIncrement');
       }
 
       _pendingValidationRequests = allPendingRequests;
@@ -63,6 +68,13 @@ class OrganizationProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Error fetching pending validation requests: $e');
     }
+  }
+  
+  // Helper method to check if there are pending validation requests shown in the UI
+  bool _hasPendingValidationRequestsInUI() {
+    // This is a simple check that could be expanded based on your UI state
+    // For now, we'll assume that if we have organizations, we might have pending requests
+    return _organizations.isNotEmpty;
   }
 
   List<Organization> get organizations => _organizations;

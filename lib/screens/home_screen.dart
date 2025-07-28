@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/message_provider.dart';
+import '../providers/business_connection_provider.dart';
+import '../providers/organization_provider.dart';
 import '../services/notifications/notification_provider.dart';
 import '../widgets/notification_badge.dart';
 import 'profile/profile_screen.dart';
@@ -27,6 +29,39 @@ class _HomeScreenState extends State<HomeScreen> {
     const ChatListScreen(),
     const MoreScreen(),
   ];
+  
+  @override
+  void initState() {
+    super.initState();
+    // Refresh notifications when home screen loads
+    Future.microtask(() => _refreshNotifications());
+  }
+  
+  // Refresh all notification badges
+  Future<void> _refreshNotifications() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      final businessConnectionProvider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+      final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
+      
+      // Re-initialize notification provider
+      await notificationProvider.initialize();
+      
+      // Fetch unread messages
+      await messageProvider.fetchUnreadMessages();
+      
+      // Fetch pending contact requests
+      await businessConnectionProvider.fetchPendingRequests();
+      
+      // Fetch pending validation requests
+      await organizationProvider.fetchPendingValidationRequests();
+      
+      debugPrint('📱 Refreshed all notifications on home screen load');
+    } catch (e) {
+      debugPrint('Error refreshing notifications: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

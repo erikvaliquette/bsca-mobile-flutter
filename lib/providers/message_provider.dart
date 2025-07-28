@@ -32,6 +32,43 @@ class MessageProvider extends ChangeNotifier {
     _notificationProvider = notificationProvider;
   }
   
+  // Fetch unread messages and update notification badge
+  Future<void> fetchUnreadMessages() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('User not authenticated for fetching unread messages');
+        return;
+      }
+      
+      // Query for unread messages where the current user is the recipient
+      final response = await Supabase.instance.client
+          .from('messages')
+          .select()
+          .eq('recipient_id', userId)
+          .eq('read', false)
+          .order('created_at', ascending: false);
+      
+      final unreadMessages = response as List<dynamic>;
+      debugPrint('📱 Found ${unreadMessages.length} unread messages');
+      
+      // Update notification badge if there are unread messages
+      if (unreadMessages.isNotEmpty && _notificationProvider != null) {
+        // Reset message count first to avoid duplicates
+        _notificationProvider!.resetMessageCount();
+        
+        // Increment for each unread message
+        for (int i = 0; i < unreadMessages.length; i++) {
+          _notificationProvider!.incrementMessageCount();
+        }
+        
+        debugPrint('📱 Updated message badge count to ${unreadMessages.length}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching unread messages: $e');
+    }
+  }
+  
   // Helper method to check if a room ID is valid
   bool _isValidRoomId(dynamic roomId) {
     if (roomId == null) return false;

@@ -529,4 +529,37 @@ class OrganizationService {
       'Decent Work and Economic Growth',
     ];
   }
+  
+  /// Search for organizations by name
+  /// 
+  /// This searches the public.organizations table for organizations matching the search term
+  /// Returns a list of organizations that match the search term (case insensitive)
+  Future<List<Organization>> searchOrganizations(String searchTerm) async {
+    try {
+      debugPrint('Searching for organizations with term: $searchTerm');
+      
+      if (searchTerm.isEmpty) {
+        return [];
+      }
+      
+      final response = await _client
+          .from('organizations')
+          .select()
+          .ilike('name', '%$searchTerm%')
+          .order('name')
+          .limit(10);
+      
+      final List<Organization> organizations = [];
+      
+      for (final org in response) {
+        organizations.add(_mapToOrganization(org));
+      }
+      
+      debugPrint('Found ${organizations.length} organizations matching "$searchTerm"');
+      return organizations;
+    } catch (e) {
+      debugPrint('Error searching organizations: $e');
+      return [];
+    }
+  }
 }
