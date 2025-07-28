@@ -535,10 +535,12 @@ class BusinessConnectionProvider extends ChangeNotifier {
       excludedUserIds.add(userId);
 
       // Fetch profiles excluding accepted and pending connections
+      // Only include profiles that are public (is_public is TRUE or NULL)
       final profilesResponse = await client
           .from('profiles')
           .select('id, first_name, last_name, avatar_url, headline, country')
           .not('id', 'in', '(${excludedUserIds.join(',')})')
+          .or('is_public.is.null,is_public.eq.true')
           .limit(20);
 
       List<BusinessConnection> discoverProfiles = [];

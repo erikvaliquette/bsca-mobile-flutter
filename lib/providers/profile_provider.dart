@@ -41,6 +41,16 @@ class ProfileProvider extends ChangeNotifier {
       // Debug the profile response
       debugPrint('Profile response: ${profileResponse.toString()}');
       
+      // Initialize preferences if not present
+      if (completeProfileData['preferences'] == null) {
+        completeProfileData['preferences'] = {};
+      }
+      
+      // Store the is_public value to be merged later with other preferences
+      // Default to true if is_public is null
+      bool isPublic = profileResponse['is_public'] ?? true;
+      debugPrint('Loaded profile visibility (is_public): $isPublic');
+      
       // Fetch user SDGs
       final sdgResponse = await Supabase.instance.client
           .from('user_sdgs')
@@ -158,13 +168,17 @@ class ProfileProvider extends ChangeNotifier {
         preferences.addAll({
           'email_notifications': settingsResponse['email_notifications'] ?? false,
           'push_notifications': settingsResponse['push_notifications'] ?? false,
-          'public_profile': settingsResponse['public_profile'] ?? true,
+          'public_profile': isPublic, // Use the is_public value from the profiles table
           'language': settingsResponse['language'] ?? 'en',
           'electricity_grid': settingsResponse['electricity_grid'] ?? 'National Average',
           'electricity_source': settingsResponse['electricity_source'] ?? 'Grid Mix (Default)',
           'transportation': settingsResponse['transportation'] ?? 'Car',
           'fuel_type': settingsResponse['fuel_type'] ?? 'Petrol',
         });
+        completeProfileData['preferences'] = preferences;
+      } else {
+        // If no settings response, still ensure public_profile is set
+        preferences['public_profile'] = isPublic;
         completeProfileData['preferences'] = preferences;
       }
       
@@ -275,6 +289,8 @@ class ProfileProvider extends ChangeNotifier {
         'avatar_url': avatarUrl ?? _profile!.avatarUrl,
         'bio': bio ?? _profile!.bio,
         'updated_at': DateTime.now().toIso8601String(),
+        // Save the public profile preference to the is_public column
+        'is_public': preferences != null ? preferences['public_profile'] ?? true : _profile!.preferences?['public_profile'] ?? true,
       };
       
       // Update the basic profile in Supabase
