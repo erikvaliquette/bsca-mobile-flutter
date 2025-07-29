@@ -93,6 +93,10 @@ class ProfileProvider extends ChangeNotifier {
           // Map settings to preferences in the profile model
           Map<String, dynamic> preferences = {};
           
+          // Map user profile fields
+          preferences['first_name'] = settingsResponse['first_name'] ?? '';
+          preferences['last_name'] = settingsResponse['last_name'] ?? '';
+          
           // Map notification settings
           preferences['email_notifications'] = settingsResponse['email_notifications'] ?? false;
           preferences['push_notifications'] = settingsResponse['push_notifications'] ?? false;
@@ -432,6 +436,10 @@ class ProfileProvider extends ChangeNotifier {
           // Extract settings-specific preferences for the new table structure
           final Map<String, dynamic> settingsData = {
             'id': user.id,
+            
+            // User profile fields
+            'first_name': preferences['first_name'] ?? '',
+            'last_name': preferences['last_name'] ?? '',
             
             // Notification settings
             'email_notifications': preferences['email_notifications'] ?? false,

@@ -128,6 +128,8 @@ class ProfileModel {
   final String id;
   final String? username;
   final String? fullName;
+  final String? firstName;
+  final String? lastName;
   final String? avatarUrl;
   final String? bio;
   final Map<String, dynamic>? preferences;
@@ -144,6 +146,8 @@ class ProfileModel {
     required this.id,
     this.username,
     this.fullName,
+    this.firstName,
+    this.lastName,
     this.avatarUrl,
     this.bio,
     this.preferences,
@@ -191,10 +195,34 @@ class ProfileModel {
           .toList();
     }
     
+    // Extract first_name and last_name from the json or from preferences
+    String? firstName;
+    String? lastName;
+    
+    // First check if they exist directly in the json (from user_settings)
+    if (json['first_name'] != null) {
+      firstName = json['first_name'] as String?;
+    } 
+    // Then check if they exist in preferences
+    else if (json['preferences'] != null && 
+             (json['preferences'] as Map<String, dynamic>)['first_name'] != null) {
+      firstName = (json['preferences'] as Map<String, dynamic>)['first_name'] as String?;
+    }
+    
+    if (json['last_name'] != null) {
+      lastName = json['last_name'] as String?;
+    } 
+    else if (json['preferences'] != null && 
+             (json['preferences'] as Map<String, dynamic>)['last_name'] != null) {
+      lastName = (json['preferences'] as Map<String, dynamic>)['last_name'] as String?;
+    }
+    
     return ProfileModel(
       id: json['id'] as String,
       username: json['username'] as String?,
       fullName: json['full_name'] as String?,
+      firstName: firstName,
+      lastName: lastName,
       avatarUrl: json['avatar_url'] as String?,
       bio: json['bio'] as String?,
       preferences: json['preferences'] as Map<String, dynamic>?,

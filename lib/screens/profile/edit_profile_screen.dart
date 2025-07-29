@@ -23,7 +23,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   
   // Basic profile info controllers
   final _usernameController = TextEditingController();
-  final _fullNameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _fullNameController = TextEditingController(); // Keep for backward compatibility
   final _bioController = TextEditingController();
   
   // Image picker
@@ -55,6 +57,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     
     if (profile != null) {
       _usernameController.text = profile.username ?? '';
+      
+      // Initialize first and last name from preferences or split full name as fallback
+      if (profile.preferences != null) {
+        _firstNameController.text = profile.preferences!['first_name'] ?? '';
+        _lastNameController.text = profile.preferences!['last_name'] ?? '';
+      }
+      
+      // If first/last name not in preferences, try to split full name
+      if (_firstNameController.text.isEmpty && _lastNameController.text.isEmpty && profile.fullName != null) {
+        final nameParts = profile.fullName!.split(' ');
+        if (nameParts.isNotEmpty) {
+          _firstNameController.text = nameParts.first;
+          if (nameParts.length > 1) {
+            _lastNameController.text = nameParts.sublist(1).join(' ');
+          }
+        }
+      }
+      
+      // Keep full name for backward compatibility
       _fullNameController.text = profile.fullName ?? '';
       _bioController.text = profile.bio ?? '';
       _avatarUrl = profile.avatarUrl;
@@ -147,8 +168,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       debugPrint('SDG Goals: $_selectedSdgGoals');
       debugPrint('Bio: ${_bioController.text}');
       
-      // Update profile - removed username and fullName fields
+      // Combine first and last name for fullName field
+      final firstName = _firstNameController.text.trim();
+      final lastName = _lastNameController.text.trim();
+      final fullName = '$firstName $lastName'.trim();
+      
+      // Store first and last name in preferences
+      if (_preferences == null) {
+        _preferences = {};
+      }
+      _preferences!['first_name'] = firstName;
+      _preferences!['last_name'] = lastName;
+      
+      // Update profile with all fields including first/last name in preferences
       await profileProvider.updateFullProfile(
+        fullName: fullName, // Update the fullName field in profiles table
         avatarUrl: newAvatarUrl,
         bio: _bioController.text,
         sdgGoals: _selectedSdgGoals,
@@ -247,6 +281,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   
                   // Basic Info Section
                   _buildSectionTitle(context, 'Basic Information'),
+                  TextFormField(
+                    controller: _firstNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'First Name',
+                      hintText: 'Enter your first name',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your first name';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _lastNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Last Name',
+                      hintText: 'Enter your last name',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your last name';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _bioController,
                     decoration: const InputDecoration(
@@ -755,21 +817,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           },
         ),
         
-        // Language Settings
-        _buildSectionTitle(context, 'Language Settings'),
-        ListTile(
-          title: const Text('Language'),
-          subtitle: Text(_getDisplayValue('language', _preferences['language'] ?? 'en')),
-          trailing: const Icon(Icons.arrow_forward_ios),
-          onTap: () {
-            SelectionDialogs.showLanguageSelectionDialog(
-              context, 
-              _preferences, 
-              setState
-            );
-          },
-        ),
-        
+
         // Energy Settings
         _buildSectionTitle(context, 'Energy Settings'),
         ListTile(
