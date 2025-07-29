@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/business_connection_model.dart';
 import '../../providers/business_connection_provider.dart';
+import '../../providers/message_provider.dart';
 import '../../services/notifications/notification_provider.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../utils/sdg_icons.dart';
 import '../../widgets/sdg_icon_widget.dart';
 import 'user_profile_screen.dart';
+import '../messaging/conversation_screen.dart';
 
 class NetworkScreen extends StatefulWidget {
   const NetworkScreen({super.key});
@@ -140,7 +142,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                                       .setSDGFilter(_selectedSDGFilter);
                                 });
                               },
-                              size: 30.0,
+                              size: 60,
                               showLabel: false,
                               useAssetIcon: true,
                             );
@@ -238,7 +240,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                                       crossAxisCount: 2,
                                       crossAxisSpacing: 16.0,
                                       mainAxisSpacing: 16.0,
-                                      childAspectRatio: 0.85,
+                                      childAspectRatio: 0.68,
                                     ),
                                     itemCount: connections.length,
                                     itemBuilder: (context, index) {
@@ -444,13 +446,26 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
   
   // Handle message action
   void _handleMessage(BusinessConnection connection) {
-    // Navigate to message screen with the connection
+    // Get current user ID from MessageProvider
+    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    final currentUserId = messageProvider.getCurrentUserId();
+    
+    if (currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to start conversation. Please try again.')),
+      );
+      return;
+    }
+    
+    // Create virtual room ID for direct message
+    final userIds = [currentUserId, connection.userId]
+      ..sort(); // Sort to ensure consistent room ID regardless of who initiates
+    final roomId = 'dm_${userIds.join('_')}';
+    
+    // Navigate to conversation screen
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(title: Text('Message ${connection.name}')),
-          body: Center(child: Text('Message functionality coming soon')),
-        ),
+        builder: (context) => ConversationScreen(roomId: roomId),
       ),
     );
   }
@@ -515,87 +530,88 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         },
         borderRadius: BorderRadius.circular(12.0),
         child: Stack(
-          alignment: Alignment.center,
           children: [
-          // Avatar (either image or text)
-          Positioned(
-            top: 20,
-            child: connection.profileImageUrl != null && connection.profileImageUrl!.isNotEmpty
-                ? CircleAvatar(
-                    radius: 36.0,
-                    backgroundImage: NetworkImage(connection.profileImageUrl!),
-                  )
-                : Text(
-                    connection.initials ?? '',
-                    style: const TextStyle(
-                      fontSize: 72.0,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-          ),
-          
-          // Name and Location
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(12.0),
+            // Main content in a column layout
+            Padding(
+              padding: const EdgeInsets.all(8.0),
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Avatar (either image or text)
+                  connection.profileImageUrl != null && connection.profileImageUrl!.isNotEmpty
+                      ? CircleAvatar(
+                          radius: 32.0,
+                          backgroundImage: NetworkImage(connection.profileImageUrl!),
+                        )
+                      : Text(
+                          connection.initials ?? '',
+                          style: const TextStyle(
+                            fontSize: 60.0,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Name
                   Text(
                     connection.name,
                     style: const TextStyle(
-                      fontSize: 18.0,
+                      fontSize: 16.0,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                     textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (displayLocation.isNotEmpty)
+                  
+                  // Location
+                  if (displayLocation.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       displayLocation,
                       style: const TextStyle(
-                        fontSize: 14.0,
+                        fontSize: 12.0,
                         color: Colors.white,
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Action buttons
-          if (showActions)
-            Positioned(
-              top: 5,
-              right: 5,
-              child: Row(
-                children: [
-                  if (onMessage != null)
-                    IconButton(
-                      icon: const Icon(Icons.message, color: Colors.white),
-                      onPressed: onMessage,
-                      iconSize: 20,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Message',
+                  ],
+                  
+                  // Action buttons below location
+                  if (showActions) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (onMessage != null)
+                          IconButton(
+                            icon: const Icon(Icons.message, color: Colors.white),
+                            onPressed: onMessage,
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Message',
+                          ),
+                        if (onMessage != null && onDisconnect != null)
+                          const SizedBox(width: 12),
+                        if (onDisconnect != null)
+                          IconButton(
+                            icon: const Icon(Icons.person_remove, color: Colors.white),
+                            onPressed: onDisconnect,
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Disconnect',
+                          ),
+                      ],
                     ),
-                  if (onDisconnect != null)
-                    IconButton(
-                      icon: const Icon(Icons.person_remove, color: Colors.white),
-                      onPressed: onDisconnect,
-                      iconSize: 20,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Disconnect',
-                    ),
+                  ],
                 ],
               ),
             ),

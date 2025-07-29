@@ -62,7 +62,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       List<Map<String, dynamic>> education = [];
       try {
         final educationResponse = await client
-            .from('education')
+            .from('education_history')
             .select()
             .eq('user_id', widget.profile.counterpartyId)
             .order('start_date', ascending: false);
