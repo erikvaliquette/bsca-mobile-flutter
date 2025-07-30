@@ -58,13 +58,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (profile != null) {
       _usernameController.text = profile.username ?? '';
       
-      // Initialize first and last name from preferences or split full name as fallback
-      if (profile.preferences != null) {
-        _firstNameController.text = profile.preferences!['first_name'] ?? '';
-        _lastNameController.text = profile.preferences!['last_name'] ?? '';
-      }
+      // Initialize first and last name directly from profile model properties
+      _firstNameController.text = profile.firstName ?? '';
+      _lastNameController.text = profile.lastName ?? '';
       
-      // If first/last name not in preferences, try to split full name
+      // If first/last name not available, try to split full name as fallback
       if (_firstNameController.text.isEmpty && _lastNameController.text.isEmpty && profile.fullName != null) {
         final nameParts = profile.fullName!.split(' ');
         if (nameParts.isNotEmpty) {

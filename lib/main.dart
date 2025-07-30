@@ -7,6 +7,7 @@ import 'providers/message_provider.dart';
 import 'providers/profile_provider.dart';
 import 'providers/business_connection_provider.dart';
 import 'providers/organization_provider.dart';
+import 'providers/subscription_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/notifications/notification_provider.dart';
@@ -52,6 +53,9 @@ void main() async {
   final organizationProvider = OrganizationProvider();
   organizationProvider.setNotificationProvider(notificationProvider);
   
+  // Initialize subscription provider
+  final subscriptionProvider = SubscriptionProvider();
+  
   runApp(
     MultiProvider(
       providers: [
@@ -61,6 +65,7 @@ void main() async {
         ChangeNotifierProvider.value(value: businessConnectionProvider),
         ChangeNotifierProvider.value(value: organizationProvider),
         ChangeNotifierProvider.value(value: notificationProvider),
+        ChangeNotifierProvider.value(value: subscriptionProvider),
       ],
       child: const BscaApp(),
     ),

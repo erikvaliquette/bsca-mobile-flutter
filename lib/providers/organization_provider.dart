@@ -72,9 +72,9 @@ class OrganizationProvider with ChangeNotifier {
   
   // Helper method to check if there are pending validation requests shown in the UI
   bool _hasPendingValidationRequestsInUI() {
-    // This is a simple check that could be expanded based on your UI state
-    // For now, we'll assume that if we have organizations, we might have pending requests
-    return _organizations.isNotEmpty;
+    // Only return true if we actually have pending validation requests
+    // This prevents the badge from showing when there are no pending requests
+    return _pendingValidationRequests.isNotEmpty;
   }
 
   List<Organization> get organizations => _organizations;
