@@ -131,7 +131,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(widget.profile.name, style: const TextStyle(color: Colors.white)),
+        // Removed name from title
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -271,17 +271,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               if (_fullProfile != null && _fullProfile!['bio'] != null && _fullProfile!['bio'].toString().isNotEmpty)
                                 _buildSection(
                                   'About',
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Theme.of(context).dividerColor),
-                                    ),
-                                    child: Text(
-                                      _fullProfile!['bio'],
-                                      style: Theme.of(context).textTheme.bodyMedium,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.surface,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Theme.of(context).dividerColor),
+                                      ),
+                                      child: Text(
+                                        _fullProfile!['bio'],
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -290,9 +293,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               if (_workHistory.isNotEmpty)
                                 _buildSection(
                                   'Work History',
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: _workHistory.map((work) => _buildWorkHistoryItem(context, work)).toList(),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: _workHistory.map((work) => _buildWorkHistoryItem(context, work)).toList(),
+                                    ),
                                   ),
                                 ),
                               
@@ -300,9 +306,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               if (_education.isNotEmpty)
                                 _buildSection(
                                   'Education',
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: _education.map((edu) => _buildEducationItem(context, edu)).toList(),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: _education.map((edu) => _buildEducationItem(context, edu)).toList(),
+                                    ),
                                   ),
                                 ),
                               
@@ -310,24 +319,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               if (_fullProfile != null && _fullProfile!['certifications'] != null && (_fullProfile!['certifications'] as List).isNotEmpty)
                                 _buildSection(
                                   'Certifications',
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: (_fullProfile!['certifications'] as List).map((cert) => 
-                                      Container(
-                                        width: double.infinity,
-                                        margin: const EdgeInsets.only(bottom: 8),
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.surface,
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Theme.of(context).dividerColor),
-                                        ),
-                                        child: Text(
-                                          cert.toString(),
-                                          style: Theme.of(context).textTheme.bodyMedium,
-                                        ),
-                                      )
-                                    ).toList(),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: (_fullProfile!['certifications'] as List).map((cert) => 
+                                        Container(
+                                          width: double.infinity,
+                                          margin: const EdgeInsets.only(bottom: 8),
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context).colorScheme.surface,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Theme.of(context).dividerColor),
+                                          ),
+                                          child: Text(
+                                            cert.toString(),
+                                            style: Theme.of(context).textTheme.bodyMedium,
+                                          ),
+                                        )
+                                      ).toList(),
+                                    ),
                                   ),
                                 ),
                               
@@ -460,11 +472,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+        // Section title with the same padding as the content
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         const SizedBox(height: 12),

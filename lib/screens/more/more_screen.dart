@@ -90,14 +90,7 @@ class _MoreScreenState extends State<MoreScreen> {
           MaterialPageRoute(builder: (context) => const SolutionsScreen()),
         ),
       ),
-      MoreMenuItem(
-        title: 'Notification Test',
-        icon: Icons.notifications,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const NotificationTestScreen()),
-        ),
-      ),
+      // Notification Test button removed as notifications are now working properly
     ];
 
     return Scaffold(

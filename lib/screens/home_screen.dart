@@ -134,13 +134,10 @@ class DashboardScreen extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context);
     
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SDG Network'),
-        automaticallyImplyLeading: false,
-      ),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          // Added top padding to avoid dynamic island on iPhone
+          padding: const EdgeInsets.fromLTRB(16.0, 60.0, 16.0, 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

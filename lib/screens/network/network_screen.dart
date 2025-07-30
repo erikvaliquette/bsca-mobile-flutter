@@ -44,13 +44,13 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
       // Listen for tab changes to refresh data if needed
       _tabController.addListener(() {
         if (_tabController.index == 0) {
-          provider.fetchConnections();
-          provider.fetchPendingRequests(); // Fetch pending requests for My Connections tab
-        } else if (_tabController.index == 1) {
           provider.fetchDiscoverProfiles();
-        } else if (_tabController.index == 2) {
+        } else if (_tabController.index == 1) {
           provider.fetchSentInvitations();
           provider.fetchReceivedInvitations();
+        } else if (_tabController.index == 2) {
+          provider.fetchConnections();
+          provider.fetchPendingRequests(); // Fetch pending requests for My Connections tab
         }
         // Trigger rebuild to show/hide + button
         setState(() {});
@@ -235,20 +235,13 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                                 ? const Center(
                                     child: Text('No connections found'),
                                   )
-                                : GridView.builder(
-                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 2,
-                                      crossAxisSpacing: 16.0,
-                                      mainAxisSpacing: 16.0,
-                                      childAspectRatio: 0.68,
-                                    ),
+                                : ListView.builder(
                                     itemCount: connections.length,
                                     itemBuilder: (context, index) {
-                                      return _buildBusinessConnectionCard(
+                                      return _buildHorizontalConnectionCard(
                                         connections[index],
-                                        showActions: true,
                                         onDisconnect: () => _handleDisconnect(connections[index]),
-                                        onMessage: () => _handleMessage(connections[index]),
+                                        onMessage: () async => await _handleMessage(connections[index]),
                                       );
                                     },
                                   ),
@@ -297,7 +290,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                           crossAxisCount: 2,
                           crossAxisSpacing: 16.0,
                           mainAxisSpacing: 16.0,
-                          childAspectRatio: 0.85,
+                          childAspectRatio: 0.65, // Adjusted for taller cards with headline
                         ),
                         itemCount: profiles.length,
                         itemBuilder: (context, index) {
@@ -394,13 +387,13 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                                         trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            IconButton(
-                                              icon: const Icon(Icons.check_circle, color: Colors.green),
-                                              onPressed: () => _handleAcceptRequest(invitation),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.cancel, color: Colors.red),
-                                              onPressed: () => _handleRejectRequest(invitation),
+                                             IconButton(
+                                               icon: const Icon(Icons.check_circle, color: Colors.green),
+                                               onPressed: () => _handleAcceptInvitation(invitation),
+                                             ),
+                                             IconButton(
+                                               icon: const Icon(Icons.cancel, color: Colors.red),
+                                               onPressed: () => _handleRejectInvitation(invitation),
                                             ),
                                           ],
                                         ),
@@ -445,7 +438,20 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
   }
   
   // Handle message action
-  void _handleMessage(BusinessConnection connection) {
+  Future<void> _handleMessage(BusinessConnection connection) async {
+    // Show loading indicator
+    final loadingSnackBar = SnackBar(
+      content: Row(
+        children: [
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: 20),
+          Text('Opening conversation with ${connection.name}...'),
+        ],
+      ),
+      duration: const Duration(seconds: 1),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(loadingSnackBar);
+    
     // Get current user ID from MessageProvider
     final messageProvider = Provider.of<MessageProvider>(context, listen: false);
     final currentUserId = messageProvider.getCurrentUserId();
@@ -457,12 +463,54 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
       return;
     }
     
-    // Create virtual room ID for direct message
-    final userIds = [currentUserId, connection.userId]
+    // Verify we have a valid counterparty ID (the other user in the connection)
+    if (connection.counterpartyId == null || connection.counterpartyId.isEmpty) {
+      print('Error: Connection has invalid counterpartyId: ${connection.counterpartyId}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to start conversation: Invalid user ID')),
+      );
+      return;
+    }
+    
+    // Verify we're not trying to message ourselves
+    if (currentUserId == connection.counterpartyId) {
+      print('Error: Attempting to message self. Current user: $currentUserId, Counterparty: ${connection.counterpartyId}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot start conversation with yourself')),
+      );
+      return;
+    }
+    
+    print('Starting conversation between current user: $currentUserId and counterparty: ${connection.counterpartyId}');
+    
+    // Create virtual room ID for direct message using counterpartyId (not userId)
+    final userIds = [currentUserId, connection.counterpartyId]
       ..sort(); // Sort to ensure consistent room ID regardless of who initiates
     final roomId = 'dm_${userIds.join('_')}';
     
-    // Navigate to conversation screen
+    print('Generated room ID: $roomId');
+    
+    // Refresh chat rooms to ensure we have the latest data
+    await messageProvider.refreshChatRooms();
+    
+    // Check if a conversation already exists with this user
+    final existingChatRooms = messageProvider.chatRooms;
+    final existingRoomIndex = existingChatRooms.indexWhere((room) => room.roomId == roomId);
+    
+    if (existingRoomIndex != -1) {
+      print('Found existing conversation at index $existingRoomIndex: ${existingChatRooms[existingRoomIndex].name}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Opening existing conversation with ${connection.name}'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: Theme.of(context).colorScheme.secondary,
+        ),
+      );
+    } else {
+      print('No existing conversation found with room ID: $roomId');
+    }
+    
+    // Navigate to conversation screen (same action for both new and existing conversations)
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ConversationScreen(roomId: roomId),
@@ -517,6 +565,9 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     // Format location for display
     final String displayLocation = connection.location ?? '';
     
+    // Get headline from title field
+    final String headline = connection.title ?? '';
+    
     return Card(
       elevation: 2.0,
       shape: RoundedRectangleBorder(
@@ -533,12 +584,12 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
           children: [
             // Main content in a column layout
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar (either image or text)
+                  // Avatar (either image or text) - moved upwards
                   connection.profileImageUrl != null && connection.profileImageUrl!.isNotEmpty
                       ? CircleAvatar(
                           radius: 32.0,
@@ -568,9 +619,25 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                     overflow: TextOverflow.ellipsis,
                   ),
                   
+                  // Headline (from title field)
+                  if (headline.isNotEmpty) ...[                    
+                    const SizedBox(height: 4),
+                    Text(
+                      headline,
+                      style: const TextStyle(
+                        fontSize: 12.0,
+                        color: Colors.white,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  
                   // Location
-                  if (displayLocation.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                  if (displayLocation.isNotEmpty) ...[                    
+                    const SizedBox(height: 4),
                     Text(
                       displayLocation,
                       style: const TextStyle(
@@ -583,8 +650,11 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                     ),
                   ],
                   
+                  // Spacer to push connect button to bottom
+                  if (isDiscover) const Spacer(),
+                  
                   // Action buttons below location
-                  if (showActions) ...[
+                  if (showActions) ...[                    
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -612,18 +682,140 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                       ],
                     ),
                   ],
+                  
+                  // Connection status button for discover profiles (moved to bottom)
+                  if (isDiscover) ...[                    
+                    const SizedBox(height: 8),
+                    _buildConnectionStatusWidget(connection, onConnect),
+                  ],
                 ],
               ),
             ),
-          
-          // Connection status button for discover profiles (positioned in top-right)
-          if (isDiscover)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _buildConnectionStatusWidget(connection, onConnect),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Build horizontal card for My Connections tab
+  Widget _buildHorizontalConnectionCard(
+    BusinessConnection connection, {
+    VoidCallback? onDisconnect,
+    VoidCallback? onMessage,
+  }) {
+    // Format location for display
+    final String displayLocation = connection.location ?? '';
+    
+    // Get headline from title field
+    final String headline = connection.title ?? '';
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      elevation: 2.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      child: InkWell(
+        onTap: () {
+          print('Connection card tapped: ${connection.name}');
+          _handleViewProfile(connection, showConnectButton: false);
+        },
+        borderRadius: BorderRadius.circular(12.0),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Avatar on the left
+              CircleAvatar(
+                radius: 32.0,
+                backgroundColor: Theme.of(context).primaryColor,
+                backgroundImage: connection.profileImageUrl != null && connection.profileImageUrl!.isNotEmpty
+                    ? NetworkImage(connection.profileImageUrl!)
+                    : null,
+                child: connection.profileImageUrl == null || connection.profileImageUrl!.isEmpty
+                    ? Text(
+                        connection.initials ?? '',
+                        style: const TextStyle(
+                          fontSize: 24.0,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+              ),
+              
+              const SizedBox(width: 16.0),
+              
+              // Content section - narrower with proper styling
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Name
+                      Text(
+                        connection.name,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      
+                      // Location
+                      if (displayLocation.isNotEmpty) ...[
+                        const SizedBox(height: 4.0),
+                        Text(
+                          displayLocation,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[600],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      
+                      // Headline/Title
+                      if (headline.isNotEmpty) ...[
+                        const SizedBox(height: 4.0),
+                        Text(
+                          headline,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[700],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Action buttons
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Message button
+                  if (onMessage != null)
+                    IconButton(
+                      icon: Icon(Icons.message, color: Theme.of(context).primaryColor),
+                      onPressed: onMessage,
+                      tooltip: 'Message',
+                    ),
+                  
+                  // Disconnect button
+                  if (onDisconnect != null)
+                    IconButton(
+                      icon: const Icon(Icons.person_remove, color: Colors.red),
+                      onPressed: onDisconnect,
+                      tooltip: 'Disconnect',
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -637,16 +829,18 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     if (status == 'pending') {
       // Show "Request Sent" for pending connections
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.orange.shade100,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.orange.shade300),
         ),
+        alignment: Alignment.center,
         child: const Text(
           'Request Sent',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             color: Colors.orange,
           ),
@@ -655,45 +849,40 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
     } else if (status == 'accepted') {
       // Show "Connected" for accepted connections (shouldn't appear in discover but just in case)
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.green.shade100,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.green.shade300),
         ),
+        alignment: Alignment.center,
         child: const Text(
           'Connected',
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
             color: Colors.green,
           ),
         ),
       );
     } else {
-      // Show + button for no connection or rejected connections
-      return Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: IconButton(
-          icon: const Icon(Icons.add, color: Colors.blue),
-          onPressed: () {
-            print('+ button tapped on profile card: ${connection.name}');
-            onConnect?.call();
-          },
-          iconSize: 20,
-          padding: const EdgeInsets.all(8),
-          constraints: const BoxConstraints(),
-          tooltip: 'Send Connection Request',
+      // Show connect button for no connection or rejected connections
+      return ElevatedButton.icon(
+        icon: const Icon(Icons.add, size: 16),
+        label: const Text('Connect'),
+        onPressed: () {
+          print('Connect button tapped on profile card: ${connection.name}');
+          onConnect?.call();
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.blue,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
       );
     }
@@ -840,6 +1029,52 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Connection request from ${request.name} rejected'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to reject connection request'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Handle accepting an invitation
+  Future<void> _handleAcceptInvitation(BusinessConnection invitation) async {
+    final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+    
+    final success = await provider.acceptConnectionRequest(invitation.id, invitation.userId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Invitation from ${invitation.name} accepted!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Failed to accept invitation'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Handle rejecting an invitation
+  Future<void> _handleRejectInvitation(BusinessConnection invitation) async {
+    final provider = Provider.of<BusinessConnectionProvider>(context, listen: false);
+    
+    final success = await provider.rejectConnectionRequest(invitation.id);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Invitation from ${invitation.name} rejected'),
           backgroundColor: Colors.orange,
         ),
       );
