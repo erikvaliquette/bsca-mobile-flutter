@@ -105,10 +105,32 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await Supabase.instance.client.auth.signOut();
+      debugPrint('Starting sign-out process');
+      
+      // First, remove all realtime subscriptions
+      try {
+        debugPrint('Removing all realtime subscriptions');
+        await Supabase.instance.client.removeAllChannels();
+        debugPrint('Successfully removed all realtime subscriptions');
+      } catch (e) {
+        debugPrint('Error removing realtime subscriptions: $e');
+        // Continue with sign-out even if this fails
+      }
+      
+      // Small delay to ensure subscriptions are closed
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Use global sign-out scope to properly clear session
+      debugPrint('Executing sign-out with global scope');
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.global);
+      
+      // Clear user data
       _user = null;
+      debugPrint('User signed out successfully');
     } catch (e) {
       _error = e.toString();
+      debugPrint('Sign out error: $e');
+      rethrow; // Rethrow to allow handling in UI
     } finally {
       _isLoading = false;
       notifyListeners();

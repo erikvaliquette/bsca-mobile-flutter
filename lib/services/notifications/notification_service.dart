@@ -107,7 +107,6 @@ class NotificationService {
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
-      onDidReceiveLocalNotification: _onDidReceiveLocalNotification,
     );
     
     // Initialize settings
@@ -185,13 +184,6 @@ class NotificationService {
           badge: true,
           sound: true,
         );
-  }
-
-  // Handle iOS notification when app is in foreground
-  void _onDidReceiveLocalNotification(
-      int id, String? title, String? body, String? payload) {
-    // Handle iOS foreground notification
-    debugPrint('Received iOS notification: $title');
   }
 
   // Handle notification tap
@@ -364,8 +356,6 @@ class NotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,
     );
   }

@@ -625,9 +625,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                Provider.of<AuthProvider>(context, listen: false).signOut();
+                
+                // Show loading indicator
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return const AlertDialog(
+                      content: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(width: 16),
+                          Text('Signing out...'),
+                        ],
+                      ),
+                    );
+                  },
+                );
+                
+                try {
+                  // Get the navigator before sign out to ensure we can navigate after auth state changes
+                  final navigator = Navigator.of(context, rootNavigator: true);
+                  
+                  // Sign out with a timeout to prevent hanging
+                  await Future.delayed(const Duration(seconds: 1));
+                  await Provider.of<AuthProvider>(context, listen: false).signOut();
+                  
+                  // Force navigation to login screen regardless of auth state changes
+                  if (mounted) {
+                    // Close loading dialog first
+                    navigator.pop();
+                    
+                    // Force navigation to login screen
+                    navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+                  }
+                } catch (e) {
+                  debugPrint('Error during sign out: $e');
+                  if (mounted) {
+                    // Close loading dialog
+                    Navigator.of(context, rootNavigator: true).pop();
+                    
+                    // Show error message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error signing out: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    
+                    // Force navigation to login screen anyway
+                    Future.delayed(const Duration(seconds: 2), () {
+                      if (mounted) {
+                        Navigator.of(context, rootNavigator: true)
+                            .pushNamedAndRemoveUntil('/login', (route) => false);
+                      }
+                    });
+                  }
+                }
               },
               child: const Text('Sign Out'),
             ),

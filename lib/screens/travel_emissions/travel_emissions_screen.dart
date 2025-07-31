@@ -164,53 +164,54 @@ class TravelEmissionsScreen extends HookWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              unselectedWidgetColor: Colors.grey[400],
-                            ),
-                            child: RadioListTile<String>(
-                              title: const Text(
-                                'Personal',
-                                style: TextStyle(fontWeight: FontWeight.w500),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                dialogPurpose = 'Personal';
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: dialogPurpose == 'Personal' 
+                                ? Theme.of(context).primaryColor 
+                                : Colors.grey[200],
+                              foregroundColor: dialogPurpose == 'Personal' 
+                                ? Colors.white 
+                                : Colors.black87,
+                              elevation: dialogPurpose == 'Personal' ? 2 : 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              value: 'Personal',
-                              groupValue: dialogPurpose,
-                              activeColor: Theme.of(context).primaryColor,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    dialogPurpose = value;
-                                  });
-                                }
-                              },
                             ),
+                            child: const Text('Personal'),
                           ),
                         ),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              unselectedWidgetColor: Colors.grey[400],
-                            ),
-                            child: RadioListTile<String>(
-                              title: const Text(
-                                'Business',
-                                style: TextStyle(fontWeight: FontWeight.w500),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                dialogPurpose = 'Business';
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: dialogPurpose == 'Business' 
+                                ? Theme.of(context).primaryColor 
+                                : Colors.grey[200],
+                              foregroundColor: dialogPurpose == 'Business' 
+                                ? Colors.white 
+                                : Colors.black87,
+                              elevation: dialogPurpose == 'Business' ? 2 : 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              value: 'Business',
-                              groupValue: dialogPurpose,
-                              activeColor: Theme.of(context).primaryColor,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    dialogPurpose = value;
-                                  });
-                                }
-                              },
                             ),
+                            child: const Text('Business'),
                           ),
                         ),
                       ],
@@ -768,119 +769,37 @@ class TravelEmissionsScreen extends HookWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Total emissions card
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Total Carbon Emissions',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                        SizedBox(
+                          width: double.infinity,
+                          child: Card(
+                            elevation: 4,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Total Carbon Emissions',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '${totalEmissions.value.toStringAsFixed(2)} kg CO₂e',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    '${totalEmissions.value.toStringAsFixed(2)} kg CO₂e',
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
-                        // Emissions by mode chart
-                        if (trips.value.isNotEmpty) ...[
-                          const Text(
-                            'Emissions by Mode of Travel',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 200,
-                            child: BarChart(
-                              BarChartData(
-                                alignment: BarChartAlignment.spaceAround,
-                                maxY: emissionsByMode.values.isEmpty
-                                    ? 10
-                                    : emissionsByMode.values.reduce((a, b) => a > b ? a : b) * 1.2,
-                                barTouchData: BarTouchData(
-                                  enabled: true,
-                                  touchTooltipData: BarTouchTooltipData(
-                                    tooltipBgColor: Colors.blueGrey,
-                                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                      final mode = emissionsByMode.keys.elementAt(groupIndex);
-                                      return BarTooltipItem(
-                                        '${getTravelModeName(mode, travelModes)}: ${rod.toY.toStringAsFixed(2)} kg',
-                                        const TextStyle(color: Colors.white),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                titlesData: FlTitlesData(
-                                  show: true,
-                                  bottomTitles: AxisTitles(
-                                    sideTitles: SideTitles(
-                                      showTitles: true,
-                                      getTitlesWidget: (value, meta) {
-                                        if (value < 0 || value >= emissionsByMode.length) {
-                                          return const SizedBox();
-                                        }
-                                        final mode = emissionsByMode.keys.elementAt(value.toInt());
-                                        final modeData = travelModes.firstWhere(
-                                          (m) => m['id'] == mode,
-                                          orElse: () => travelModes[0],
-                                        );
-                                        return Icon(modeData['icon'] as IconData);
-                                      },
-                                    ),
-                                  ),
-                                  leftTitles: AxisTitles(
-                                    sideTitles: SideTitles(
-                                      showTitles: true,
-                                      reservedSize: 40,
-                                    ),
-                                  ),
-                                  topTitles: AxisTitles(
-                                    sideTitles: SideTitles(showTitles: false),
-                                  ),
-                                  rightTitles: AxisTitles(
-                                    sideTitles: SideTitles(showTitles: false),
-                                  ),
-                                ),
-                                borderData: FlBorderData(show: false),
-                                barGroups: emissionsByMode.entries
-                                    .map(
-                                      (entry) => BarChartGroupData(
-                                        x: emissionsByMode.keys.toList().indexOf(entry.key),
-                                        barRods: [
-                                          BarChartRodData(
-                                            toY: entry.value,
-                                            color: getModeColor(entry.key),
-                                            width: 20,
-                                            borderRadius: const BorderRadius.only(
-                                              topLeft: Radius.circular(4),
-                                              topRight: Radius.circular(4),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
                         
                         // Mode selection
                         const Text(
@@ -890,119 +809,55 @@ class TravelEmissionsScreen extends HookWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         
-                        // Trip purpose selection
-                        Text(
-                          'Trip Purpose',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Theme(
-                                  data: Theme.of(context).copyWith(
-                                    unselectedWidgetColor: Colors.grey[400],
-                                  ),
-                                  child: RadioListTile<String>(
-                                    title: Text(
-                                      'Personal',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: selectedPurpose.value == 'Personal' 
-                                            ? Theme.of(context).primaryColor 
-                                            : Colors.grey[700],
-                                      ),
-                                    ),
-                                    value: 'Personal',
-                                    groupValue: selectedPurpose.value,
-                                    activeColor: Theme.of(context).primaryColor,
-                                    onChanged: (value) => selectedPurpose.value = value!,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Theme(
-                                  data: Theme.of(context).copyWith(
-                                    unselectedWidgetColor: Colors.grey[400],
-                                  ),
-                                  child: RadioListTile<String>(
-                                    title: Text(
-                                      'Business',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: selectedPurpose.value == 'Business' 
-                                            ? Theme.of(context).primaryColor 
-                                            : Colors.grey[700],
-                                      ),
-                                    ),
-                                    value: 'Business',
-                                    groupValue: selectedPurpose.value,
-                                    activeColor: Theme.of(context).primaryColor,
-                                    onChanged: (value) => selectedPurpose.value = value!,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        // Icon-based mode selection grid
+                        GridView.count(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.0,
                           children: travelModes.map((mode) {
                             final isSelected = selectedMode.value == mode['id'];
-                            return InkWell(
+                            return GestureDetector(
                               onTap: isTracking.value
                                   ? null
                                   : () {
                                       selectedMode.value = mode['id'] as String;
                                     },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.outline,
-                                  ),
+                                      ? _getModeColor(mode['id'] as String)
+                                      : _getModeColor(mode['id'] as String).withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
                                       mode['icon'] as IconData,
-                                      color: isSelected
-                                          ? Theme.of(context).colorScheme.onPrimary
-                                          : Theme.of(context).colorScheme.onSurface,
+                                      size: 40,
+                                      color: Colors.white,
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(height: 8),
                                     Text(
                                       mode['name'] as String,
-                                      style: TextStyle(
-                                        color: isSelected
-                                            ? Theme.of(context).colorScheme.onPrimary
-                                            : Theme.of(context).colorScheme.onSurface,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
                                       ),
+                                      textAlign: TextAlign.center,
                                     ),
                                   ],
                                 ),
@@ -1022,53 +877,190 @@ class TravelEmissionsScreen extends HookWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          Container(
-                            height: 50,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: FuelTypes.getFuelTypesForMode(selectedMode.value).length,
-                              itemBuilder: (context, index) {
-                                final fuelType = FuelTypes.getFuelTypesForMode(selectedMode.value)[index];
-                                final isSelected = selectedFuelType.value == fuelType['id'];
-                                
-                                return GestureDetector(
-                                  onTap: () {
-                                    selectedFuelType.value = fuelType['id'] as String;
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    margin: const EdgeInsets.only(right: 8),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Theme.of(context).primaryColor.withOpacity(0.2)
-                                          : Colors.grey[200],
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? Theme.of(context).primaryColor
-                                            : Colors.transparent,
-                                        width: 2,
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: FuelTypes.getFuelTypesForMode(selectedMode.value).map((fuelType) {
+                              final isSelected = selectedFuelType.value == fuelType['id'];
+                              
+                              return GestureDetector(
+                                onTap: () {
+                                  selectedFuelType.value = fuelType['id'] as String;
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? _getFuelTypeColor(fuelType['id'] as String)
+                                        : _getFuelTypeColor(fuelType['id'] as String).withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 3,
+                                        offset: const Offset(0, 1),
                                       ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _getFuelTypeIcon(fuelType['id'] as String),
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
                                         fuelType['name'] as String,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           fontSize: 14,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                          color: isSelected
-                                              ? Theme.of(context).primaryColor
-                                              : Colors.grey[600],
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            }).toList(),
                           ),
                         ],
+                        
+                        // Trip purpose selection
+                        const SizedBox(height: 24),
+                        Text(
+                          'Trip Purpose',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => selectedPurpose.value = 'Personal',
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: selectedPurpose.value == 'Personal'
+                                        ? Colors.grey[300]
+                                        : Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: selectedPurpose.value == 'Personal'
+                                          ? Colors.grey[400]!
+                                          : Colors.grey[300]!,
+                                      width: 1,
+                                    ),
+                                    boxShadow: selectedPurpose.value == 'Personal'
+                                        ? [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.1),
+                                              blurRadius: 3,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.person,
+                                        color: selectedPurpose.value == 'Personal'
+                                            ? Colors.grey[700]
+                                            : Colors.grey[500],
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Personal',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: selectedPurpose.value == 'Personal'
+                                              ? FontWeight.w600
+                                              : FontWeight.w500,
+                                          color: selectedPurpose.value == 'Personal'
+                                              ? Colors.grey[700]
+                                              : Colors.grey[500],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => selectedPurpose.value = 'Business',
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: selectedPurpose.value == 'Business'
+                                        ? Colors.grey[300]
+                                        : Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: selectedPurpose.value == 'Business'
+                                          ? Colors.grey[400]!
+                                          : Colors.grey[300]!,
+                                      width: 1,
+                                    ),
+                                    boxShadow: selectedPurpose.value == 'Business'
+                                        ? [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.1),
+                                              blurRadius: 3,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.business,
+                                        color: selectedPurpose.value == 'Business'
+                                            ? Colors.grey[700]
+                                            : Colors.grey[500],
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Business',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: selectedPurpose.value == 'Business'
+                                              ? FontWeight.w600
+                                              : FontWeight.w500,
+                                          color: selectedPurpose.value == 'Business'
+                                              ? Colors.grey[700]
+                                              : Colors.grey[500],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 24),
                         
                         // Start/Stop tracking button
@@ -1094,11 +1086,33 @@ class TravelEmissionsScreen extends HookWidget {
                         const SizedBox(height: 24),
                         
                         // Recent trips
-                        const Text(
-                          'Recent Trips',
+                        Row(
+                          children: [
+                            const Text(
+                              'Recent Trips',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: 'Swipe right to edit, swipe left to delete',
+                              child: Icon(
+                                Icons.help_outline,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Swipe right to edit, swipe left to delete',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -1395,6 +1409,67 @@ class TravelEmissionsScreen extends HookWidget {
             )
           : null,
     );
+  }
+
+  /// Get color for transport mode
+  Color _getModeColor(String mode) {
+    return getModeColor(mode);
+  }
+
+  /// Get color for fuel type
+  Color _getFuelTypeColor(String fuelType) {
+    switch (fuelType) {
+      case 'petrol':
+        return Colors.orange;
+      case 'diesel':
+        return Colors.brown;
+      case 'electric':
+        return Colors.green;
+      case 'hybrid':
+        return Colors.lightGreen;
+      case 'natural_gas':
+        return Colors.blue;
+      case 'biofuel':
+        return Colors.amber;
+      case 'jet_fuel':
+        return Colors.red;
+      case 'sustainable_aviation_fuel':
+        return Colors.teal;
+      case 'human_powered':
+        return Colors.lime;
+      case 'wind_power':
+        return Colors.cyan;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  /// Get icon for fuel type
+  IconData _getFuelTypeIcon(String fuelType) {
+    switch (fuelType) {
+      case 'petrol':
+        return Icons.local_gas_station;
+      case 'diesel':
+        return Icons.local_gas_station;
+      case 'electric':
+        return Icons.electric_bolt;
+      case 'hybrid':
+        return Icons.eco;
+      case 'natural_gas':
+        return Icons.gas_meter;
+      case 'biofuel':
+        return Icons.grass;
+      case 'jet_fuel':
+        return Icons.airplanemode_active;
+      case 'sustainable_aviation_fuel':
+        return Icons.eco;
+      case 'human_powered':
+        return Icons.fitness_center;
+      case 'wind_power':
+        return Icons.air;
+      default:
+        return Icons.help;
+    }
   }
 
   /// Handle emissions reattribution when editing trips

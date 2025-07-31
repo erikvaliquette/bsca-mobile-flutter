@@ -6,6 +6,7 @@ import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_
 import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
 import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
+import 'package:bsca_mobile_flutter/screens/travel_emissions/my_travel_emissions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/more/notification_test_screen.dart';
 import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
 import 'package:bsca_mobile_flutter/widgets/notification_badge.dart';
@@ -48,6 +49,14 @@ class _MoreScreenState extends State<MoreScreen> {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const ActionsScreen()),
+        ),
+      ),
+      MoreMenuItem(
+        title: 'My Travel Emissions',
+        icon: Icons.analytics,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MyTravelEmissionsScreen()),
         ),
       ),
       MoreMenuItem(

@@ -178,9 +178,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _preferences!['first_name'] = firstName;
       _preferences!['last_name'] = lastName;
       
-      // Update profile with all fields including first/last name in preferences
+      // Update profile with all fields including first/last name
       await profileProvider.updateFullProfile(
         fullName: fullName, // Update the fullName field in profiles table
+        firstName: firstName, // Save first name to profiles table
+        lastName: lastName, // Save last name to profiles table
         avatarUrl: newAvatarUrl,
         bio: _bioController.text,
         sdgGoals: _selectedSdgGoals,

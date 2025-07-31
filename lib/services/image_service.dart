@@ -49,7 +49,19 @@ class ImageService {
     
     if (source == null) return null;
     
-    // Check for appropriate permission based on source
+    // For iOS, we'll handle permissions differently to work with limited photo access
+    if (Platform.isIOS) {
+      // On iOS, we'll try to pick the image directly and let the system handle permissions
+      // This works better with iOS 14+ limited photo access
+      return await getImageFromSource(
+        source,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
+        imageQuality: imageQuality,
+      );
+    }
+    
+    // For Android, check for appropriate permission based on source
     bool hasPermission = false;
     if (source == ImageSource.camera) {
       hasPermission = await PermissionService.instance.handlePermission(
@@ -61,9 +73,9 @@ class ImageService {
     } else {
       hasPermission = await PermissionService.instance.handlePermission(
         context,
-        permission_handler.Permission.photos,
-        'Photos',
-        'This app needs access to your photos to select images. Please grant photos permission to use this feature.',
+        permission_handler.Permission.storage,
+        'Storage',
+        'This app needs access to your storage to select images. Please grant storage permission to use this feature.',
       );
     }
     

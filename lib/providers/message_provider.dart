@@ -328,7 +328,15 @@ class MessageProvider extends ChangeNotifier {
           debugPrint('✅ DEBUG: Successfully created ChatRoomModel for room: ${room.roomId}');
           
           // Fetch last message for each room
-          await _fetchLastMessage(room.roomId);
+          final hasMessages = await _fetchLastMessage(room.roomId);
+          
+          // Only keep rooms that have messages
+          if (!hasMessages) {
+            debugPrint('🗑️ Removing room ${room.roomId} from list because it has no messages');
+            // Remove this room from _chatRooms since we just added it
+            _chatRooms.removeLast();
+            continue;
+          }
           
           // Fetch unread count for each room
           await _fetchUnreadCount(room.roomId);
@@ -346,17 +354,18 @@ class MessageProvider extends ChangeNotifier {
   }
 
   // Fetch the last message for a chat room
-  Future<void> _fetchLastMessage(String roomId) async {
+  // Returns true if the room has messages, false otherwise
+  Future<bool> _fetchLastMessage(String roomId) async {
     // Skip invalid room IDs
     if (!_isValidRoomId(roomId)) {
       debugPrint('⚠️ Skipping _fetchLastMessage for invalid room_id: $roomId');
-      return;
+      return false;
     }
     
     // Additional safety check to prevent "private" from being used as UUID
     if (roomId == 'private') {
       debugPrint('⚠️ CRITICAL: Preventing "private" from being used as room_id in _fetchLastMessage');
-      return;
+      return false;
     }
     
     try {
@@ -389,9 +398,15 @@ class MessageProvider extends ChangeNotifier {
           );
           _chatRooms[index] = updatedRoom;
         }
+        debugPrint('✅ Room $roomId has messages');
+        return true;
+      } else {
+        debugPrint('⚠️ Room $roomId has no messages');
+        return false;
       }
     } catch (e) {
       debugPrint('Error fetching last message for room $roomId: $e');
+      return false; // Assume no messages on error
     }
   }
 
@@ -812,18 +827,49 @@ class MessageProvider extends ChangeNotifier {
     
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-
-      await Supabase.instance.client
+      if (user == null) {
+        debugPrint('⚠️ Cannot mark messages as read: User not authenticated');
+        return;
+      }
+      
+      debugPrint('🔍 Marking messages as read: room=$roomId, user=${user.id}');
+      
+      // First, check how many unread messages we have before updating
+      final unreadBefore = await Supabase.instance.client
+          .from('messages')
+          .select('id')
+          .eq('room_id', roomId)
+          .eq('recipient_id', user.id)  // Make sure we're only checking messages where user is recipient
+          .eq('read', false);
+      
+      debugPrint('📊 Found ${unreadBefore.length} unread messages before update');
+      
+      // Update all unread messages where the current user is the recipient
+      // This is more precise than using neq('sender_id', user.id)
+      final response = await Supabase.instance.client
           .from('messages')
           .update({
             'read': true,
             'read_at': DateTime.now().toIso8601String(),
           })
-                    .eq('room_id', roomId)
-          .neq('sender_id', user.id)
-                    .eq('read', false)
-          ;
+          .eq('room_id', roomId)
+          .eq('recipient_id', user.id)  // Explicitly target messages where user is recipient
+          .eq('read', false);
+      
+      debugPrint('✅ Updated messages as read successfully');
+      
+      // Verify the update worked by checking unread count again
+      final unreadAfter = await Supabase.instance.client
+          .from('messages')
+          .select('id')
+          .eq('room_id', roomId)
+          .eq('recipient_id', user.id)
+          .eq('read', false);
+      
+      debugPrint('📊 Found ${unreadAfter.length} unread messages after update');
+      if (unreadAfter.length > 0) {
+        debugPrint('⚠️ Warning: Some messages were not marked as read!');
+      }
 
       // Update the unread count for this room to 0
       final index = _chatRooms.indexWhere((room) => room.roomId == roomId);
@@ -836,16 +882,17 @@ class MessageProvider extends ChangeNotifier {
           name: _chatRooms[index].name,
           lastMessage: _chatRooms[index].lastMessage,
           lastMessageTime: _chatRooms[index].lastMessageTime,
-          unreadCount: 0,
+          unreadCount: unreadAfter.length,  // Use actual count from database
           participantIds: _chatRooms[index].participantIds,
           isStarred: _chatRooms[index].isStarred,
           avatarUrl: _chatRooms[index].avatarUrl,
         );
         _chatRooms[index] = updatedRoom;
+        debugPrint('📱 Updated local chat room unread count to ${unreadAfter.length}');
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Error marking messages as read: $e');
+      debugPrint('❌ Error marking messages as read: $e');
     }
   }
 

@@ -258,7 +258,9 @@ class ProfileProvider extends ChangeNotifier {
   /// Updates the full user profile with all provided information
   Future<void> updateFullProfile({
     String? username, 
-    String? fullName, 
+    String? fullName,
+    String? firstName,
+    String? lastName, 
     String? avatarUrl,
     String? bio,
     List<String>? sdgGoals,
@@ -296,6 +298,14 @@ class ProfileProvider extends ChangeNotifier {
         // Save the public profile preference to the is_public column
         'is_public': preferences != null ? preferences['public_profile'] ?? true : _profile!.preferences?['public_profile'] ?? true,
       };
+      
+      // Add first_name and last_name if provided
+      if (firstName != null) {
+        profileUpdateData['first_name'] = firstName;
+      }
+      if (lastName != null) {
+        profileUpdateData['last_name'] = lastName;
+      }
       
       // Update the basic profile in Supabase
       try {
