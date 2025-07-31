@@ -88,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 160),
                   // App Logo
                   Center(
                     child: Image.asset(
@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                     ),
                   ),
-                  const SizedBox(height: 80),
+                  const SizedBox(height: 160),
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
