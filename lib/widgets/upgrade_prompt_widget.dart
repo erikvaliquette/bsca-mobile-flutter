@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/subscription_provider.dart';
 import '../services/subscription_service.dart';
+import '../screens/subscription_management_screen.dart';
 
 class UpgradePromptWidget extends StatelessWidget {
   final String featureKey;
@@ -281,19 +282,9 @@ class UpgradePromptWidget extends StatelessWidget {
   }
 
   void _navigateToSubscriptionScreen(BuildContext context, ServiceLevel? targetTier) {
-    // TODO: Navigate to subscription management screen
-    // This will be implemented when we create the subscription management UI
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          targetTier != null 
-            ? 'Upgrade to ${targetTier.displayName} - Subscription screen coming soon!'
-            : 'View all plans - Subscription screen coming soon!',
-        ),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SubscriptionManagementScreen(),
       ),
     );
   }

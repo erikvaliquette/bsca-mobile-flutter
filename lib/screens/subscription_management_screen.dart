@@ -169,7 +169,7 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
           ServiceLevel.enterprise, 
           'Enterprise', 
           'For organizations and teams', 
-          19.99,
+          29.99,
           currentTier,
         ),
         _buildTierCard(
@@ -177,7 +177,7 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
           ServiceLevel.impactPartner, 
           'Impact Partner', 
           'Premium tier for sustainability leaders', 
-          49.99,
+          149.99,
           currentTier,
         ),
       ],
@@ -261,7 +261,7 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
               DataColumn(label: Text('Impact Partner')),
             ],
             rows: [
-              _buildFeatureRow('Connections', '10', 'Unlimited', 'Unlimited', 'Unlimited'),
+              _buildFeatureRow('Connections', '100', 'Unlimited', 'Unlimited', 'Unlimited'),
               _buildFeatureRow('Business Trip Attribution', '❌', '✅', '✅', '✅'),
               _buildFeatureRow('Advanced Analytics', '❌', '❌', '✅', '✅'),
               _buildFeatureRow('Team Management', '❌', '❌', '✅', '✅'),

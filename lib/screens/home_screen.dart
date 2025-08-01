@@ -8,6 +8,7 @@ import '../providers/subscription_provider.dart';
 import '../services/notifications/notification_provider.dart';
 import '../widgets/notification_badge.dart';
 import '../widgets/subscription_status_widget.dart';
+import '../widgets/sustainability_background.dart';
 import 'profile/profile_screen.dart';
 import 'messaging/chat_list_screen.dart';
 import 'more/more_screen.dart';
@@ -136,11 +137,12 @@ class DashboardScreen extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context);
     
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          // Added top padding to avoid dynamic island on iPhone
-          padding: const EdgeInsets.fromLTRB(16.0, 60.0, 16.0, 16.0),
-          child: Column(
+      body: SustainabilityBackground(
+        child: SingleChildScrollView(
+          child: Padding(
+            // Added top padding to avoid dynamic island on iPhone
+            padding: const EdgeInsets.fromLTRB(16.0, 60.0, 16.0, 16.0),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Welcome Card
@@ -224,6 +226,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

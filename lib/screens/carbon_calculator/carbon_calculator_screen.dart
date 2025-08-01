@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import '../../models/organization_model.dart';
 import '../../providers/organization_provider.dart';
 import '../../services/carbon_calculator_service.dart';
+import '../../services/subscription_helper.dart';
+import '../../services/subscription_service.dart';
 
 import '../../models/fuel_types.dart';
 import '../../services/connectivity_service.dart';
@@ -146,57 +148,104 @@ class CarbonCalculatorScreen extends HookWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Calculate For',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
+                      child: FutureBuilder<bool>(
+                        future: SubscriptionHelper.canAccessFeature(
+                          'organization_access'
+                        ),
+                        builder: (context, snapshot) {
+                          final canAccessOrganizations = snapshot.data ?? false;
+                          
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Radio<bool>(
-                                value: false,
-                                groupValue: isOrganizationMode.value,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    isOrganizationMode.value = value;
-                                    selectedOrganization.value = null;
-                                  }
-                                },
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Calculate For',
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                  if (!canAccessOrganizations)
+                                    Tooltip(
+                                      message: 'Available in Enterprise tier and above',
+                                      child: Icon(
+                                        Icons.lock_outline,
+                                        color: Colors.grey[400],
+                                        size: 18,
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const Text('Personal'),
-                              const SizedBox(width: 24),
-                              Radio<bool>(
-                                value: true,
-                                groupValue: isOrganizationMode.value,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    isOrganizationMode.value = value;
-                                    // Get the current organization from provider
-                                    final orgProvider = Provider.of<OrganizationProvider>(
-                                      context, 
-                                      listen: false
-                                    );
-                                    if (orgProvider.selectedOrganization != null) {
-                                      selectedOrganization.value = orgProvider.selectedOrganization;
-                                    }
-                                  }
-                                },
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Radio<bool>(
+                                    value: false,
+                                    groupValue: isOrganizationMode.value,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        isOrganizationMode.value = value;
+                                        selectedOrganization.value = null;
+                                      }
+                                    },
+                                  ),
+                                  const Text('Personal'),
+                                  const SizedBox(width: 24),
+                                  Radio<bool>(
+                                    value: true,
+                                    groupValue: isOrganizationMode.value,
+                                    // Disable the radio button completely for users without access
+                                    onChanged: canAccessOrganizations ? (value) {
+                                      if (value != null) {
+                                        isOrganizationMode.value = value;
+                                        // Get the current organization from provider
+                                        final orgProvider = Provider.of<OrganizationProvider>(
+                                          context, 
+                                          listen: false
+                                        );
+                                        if (orgProvider.selectedOrganization != null) {
+                                          selectedOrganization.value = orgProvider.selectedOrganization;
+                                        }
+                                      }
+                                    } : (value) async {
+                                      // Show upgrade prompt
+                                      await SubscriptionHelper.showUpgradePromptIfNeeded(
+                                        context,
+                                        'organization_access',
+                                        customMessage: 'Organization access is available in Enterprise tier and above.'
+                                      );
+                                      // Ensure we reset to Personal mode if they try to select Organization
+                                      isOrganizationMode.value = false;
+                                      selectedOrganization.value = null;
+                                    },
+                                  ),
+                                  Row(
+                                    children: [
+                                      const Text('Organization'),
+                                      if (!canAccessOrganizations)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 4.0),
+                                          child: Icon(
+                                            Icons.lock_outline,
+                                            color: Colors.grey[400],
+                                            size: 14,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              const Text('Organization'),
+                              if (isOrganizationMode.value && selectedOrganization.value != null && canAccessOrganizations)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    'Selected: ${selectedOrganization.value!.name}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
                             ],
-                          ),
-                          if (isOrganizationMode.value && selectedOrganization.value != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                'Selected: ${selectedOrganization.value!.name}',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   ),

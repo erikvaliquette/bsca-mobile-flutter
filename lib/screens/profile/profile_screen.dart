@@ -271,21 +271,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // Help & Support and About sections
-                            _buildProfileSection(
-                              context,
-                              Icons.help_outline,
-                              'Help & Support',
-                              () => _showFeatureComingSoon(context),
-                            ),
-                            
-                            _buildProfileSection(
-                              context,
-                              Icons.info_outline,
-                              'About',
-                              () => _showFeatureComingSoon(context),
-                            ),
-                            
+
                             const SizedBox(height: 32),
                             // Sign out button
                             ElevatedButton.icon(
