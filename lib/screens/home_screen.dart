@@ -170,10 +170,7 @@ class DashboardScreen extends StatelessWidget {
               
               const SizedBox(height: 24.0),
               
-              // Subscription Status
-              const SubscriptionStatusWidget(),
-              
-              const SizedBox(height: 24.0),
+
               
               // Your Impact Section
               Card(

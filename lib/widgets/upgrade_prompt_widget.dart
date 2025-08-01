@@ -171,62 +171,58 @@ class UpgradePromptWidget extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Current tier
+          Text(
+            'Current: ${currentTier.displayName}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
+              Icon(Icons.close, color: Colors.red.shade600, size: 16),
+              const SizedBox(width: 4),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Current: ${currentTier.displayName}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.close, color: Colors.red.shade600, size: 16),
-                        const SizedBox(width: 4),
-                        Text(
-                          _getFeatureName(featureKey),
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  _getFeatureName(featureKey),
+                  style: TextStyle(color: Colors.grey.shade600),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Container(
-                width: 1,
-                height: 40,
-                color: Colors.grey.shade300,
-              ),
+            ],
+          ),
+          
+          // Divider between tiers
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+          ),
+          
+          // Upgraded tier
+          Text(
+            'With ${minimumTier.displayName}:',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.green.shade600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.check, color: Colors.green.shade600, size: 16),
+              const SizedBox(width: 4),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'With ${minimumTier.displayName}:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.check, color: Colors.green.shade600, size: 16),
-                        const SizedBox(width: 4),
-                        Text(
-                          _getFeatureName(featureKey),
-                          style: TextStyle(color: Colors.green.shade600),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  _getFeatureName(featureKey),
+                  style: TextStyle(color: Colors.green.shade600),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

@@ -972,124 +972,168 @@ class TravelEmissionsScreen extends HookWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => selectedPurpose.value = 'Personal',
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: selectedPurpose.value == 'Personal'
-                                        ? Colors.grey[300]
-                                        : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: selectedPurpose.value == 'Personal'
-                                          ? Colors.grey[400]!
-                                          : Colors.grey[300]!,
-                                      width: 1,
-                                    ),
-                                    boxShadow: selectedPurpose.value == 'Personal'
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.1),
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.person,
+                        FutureBuilder<bool>(
+                          future: SubscriptionHelper.canAccessFeature(
+                            SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION
+                          ),
+                          builder: (context, snapshot) {
+                            final canAccessBusinessTrips = snapshot.data ?? false;
+                            
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => selectedPurpose.value = 'Personal',
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      decoration: BoxDecoration(
                                         color: selectedPurpose.value == 'Personal'
-                                            ? Colors.grey[700]
-                                            : Colors.grey[500],
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Personal',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: selectedPurpose.value == 'Personal'
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
+                                            ? Colors.grey[300]
+                                            : Colors.grey[100],
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
                                           color: selectedPurpose.value == 'Personal'
-                                              ? Colors.grey[700]
-                                              : Colors.grey[500],
+                                              ? Colors.grey[400]!
+                                              : Colors.grey[300]!,
+                                          width: 1,
                                         ),
+                                        boxShadow: selectedPurpose.value == 'Personal'
+                                            ? [
+                                                BoxShadow(
+                                                  color: Colors.black.withOpacity(0.1),
+                                                  blurRadius: 3,
+                                                  offset: const Offset(0, 1),
+                                                ),
+                                              ]
+                                            : null,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => selectedPurpose.value = 'Business',
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: selectedPurpose.value == 'Business'
-                                        ? Colors.grey[300]
-                                        : Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: selectedPurpose.value == 'Business'
-                                          ? Colors.grey[400]!
-                                          : Colors.grey[300]!,
-                                      width: 1,
-                                    ),
-                                    boxShadow: selectedPurpose.value == 'Business'
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.1),
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 1),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.person,
+                                            color: selectedPurpose.value == 'Personal'
+                                                ? Colors.grey[700]
+                                                : Colors.grey[500],
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Personal',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: selectedPurpose.value == 'Personal'
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w500,
+                                              color: selectedPurpose.value == 'Personal'
+                                                  ? Colors.grey[700]
+                                                  : Colors.grey[500],
                                             ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.business,
-                                        color: selectedPurpose.value == 'Business'
-                                            ? Colors.grey[700]
-                                            : Colors.grey[500],
-                                        size: 20,
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Business',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: selectedPurpose.value == 'Business'
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                          color: selectedPurpose.value == 'Business'
-                                              ? Colors.grey[700]
-                                              : Colors.grey[500],
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      if (canAccessBusinessTrips) {
+                                        selectedPurpose.value = 'Business';
+                                      } else {
+                                        // Show upgrade prompt for FREE tier users
+                                        await SubscriptionHelper.showUpgradePromptIfNeeded(
+                                          context,
+                                          SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION,
+                                          customMessage: 'Business trip attribution is available in Professional tier and above.'
+                                        );
+                                        // Keep purpose as Personal
+                                        selectedPurpose.value = 'Personal';
+                                      }
+                                    },
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selectedPurpose.value == 'Business'
+                                                ? Colors.grey[300]
+                                                : Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: selectedPurpose.value == 'Business'
+                                                  ? Colors.grey[400]!
+                                                  : Colors.grey[300]!,
+                                              width: 1,
+                                            ),
+                                            boxShadow: selectedPurpose.value == 'Business'
+                                                ? [
+                                                    BoxShadow(
+                                                      color: Colors.black.withOpacity(0.1),
+                                                      blurRadius: 3,
+                                                      offset: const Offset(0, 1),
+                                                    ),
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.business,
+                                                color: selectedPurpose.value == 'Business'
+                                                    ? Colors.grey[700]
+                                                    : Colors.grey[500],
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                'Business',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: selectedPurpose.value == 'Business'
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
+                                                  color: selectedPurpose.value == 'Business'
+                                                      ? Colors.grey[700]
+                                                      : Colors.grey[500],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Show lock icon for FREE tier users
+                                        if (!canAccessBusinessTrips)
+                                          Positioned(
+                                            top: 0,
+                                            right: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context).primaryColor,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.lock,
+                                                color: Colors.white,
+                                                size: 12,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 24),
                         

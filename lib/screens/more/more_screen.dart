@@ -10,6 +10,7 @@ import 'package:bsca_mobile_flutter/screens/travel_emissions/my_travel_emissions
 
 import 'package:bsca_mobile_flutter/screens/more/help_support_screen.dart';
 import 'package:bsca_mobile_flutter/screens/more/about_screen.dart';
+import 'package:bsca_mobile_flutter/screens/subscription_management_screen.dart';
 import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
 import 'package:bsca_mobile_flutter/services/subscription_helper.dart';
 import 'package:bsca_mobile_flutter/services/subscription_service.dart';
@@ -160,6 +161,14 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AboutScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'Subscription Management',
+            icon: Icons.card_membership,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SubscriptionManagementScreen()),
             ),
           ),
           // Notification Test button removed as notifications are now working properly
