@@ -831,8 +831,14 @@ class TravelEmissionsScreen extends HookWidget {
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? _getModeColor(mode['id'] as String)
-                                      : _getModeColor(mode['id'] as String).withOpacity(0.8),
+                                      : _getModeColor(mode['id'] as String).withOpacity(0.3),
                                   borderRadius: BorderRadius.circular(16),
+                                  border: isSelected
+                                      ? Border.all(
+                                          color: Colors.white,
+                                          width: 3,
+                                        )
+                                      : null,
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.1),
@@ -896,8 +902,14 @@ class TravelEmissionsScreen extends HookWidget {
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? _getFuelTypeColor(fuelType['id'] as String)
-                                        : _getFuelTypeColor(fuelType['id'] as String).withOpacity(0.7),
+                                        : _getFuelTypeColor(fuelType['id'] as String).withOpacity(0.3),
                                     borderRadius: BorderRadius.circular(12),
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          )
+                                        : null,
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black.withOpacity(0.1),

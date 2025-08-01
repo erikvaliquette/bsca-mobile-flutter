@@ -6,12 +6,14 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/local_trip_data.dart';
+import '../models/local_business_connection.dart';
 
 /// Service for managing local storage operations
 class LocalStorageService {
   static final LocalStorageService _instance = LocalStorageService._();
   static const String _tripsBoxName = 'trips';
   static const String _locationsBoxName = 'locations';
+  static const String _connectionsBoxName = 'connections';
   
   LocalStorageService._();
   
@@ -19,6 +21,7 @@ class LocalStorageService {
   
   Box<LocalTripData>? _tripsBox;
   Box<LocalLocationPoint>? _locationsBox;
+  Box<LocalBusinessConnection>? _connectionsBox;
   
   /// Initialize Hive and open boxes
   Future<void> init() async {
@@ -34,14 +37,19 @@ class LocalStorageService {
       if (!Hive.isAdapterRegistered(1)) {
         Hive.registerAdapter(LocalLocationPointAdapter());
       }
+      if (!Hive.isAdapterRegistered(2)) {
+        Hive.registerAdapter(LocalBusinessConnectionAdapter());
+      }
       
       // Force delete any lock files that might be preventing box opening
       await _forceDeleteLockFiles(appDocumentDir.path, _tripsBoxName);
       await _forceDeleteLockFiles(appDocumentDir.path, _locationsBoxName);
+      await _forceDeleteLockFiles(appDocumentDir.path, _connectionsBoxName);
       
       // Open boxes with recovery options and retry mechanism
       _tripsBox = await _openBoxSafely<LocalTripData>(_tripsBoxName);
       _locationsBox = await _openBoxSafely<LocalLocationPoint>(_locationsBoxName);
+      _connectionsBox = await _openBoxSafely<LocalBusinessConnection>(_connectionsBoxName);
       
       debugPrint('LocalStorageService initialized');
     } catch (e) {
@@ -322,9 +330,148 @@ class LocalStorageService {
     }
   }
   
+  // ===== CONNECTION CACHING METHODS =====
+  
+  /// Cache connections for a user
+  Future<bool> cacheConnections(List<LocalBusinessConnection> connections, String userId) async {
+    try {
+      if (_connectionsBox == null) {
+        throw Exception('Connections box not initialized');
+      }
+      
+      // Clear existing connections for this user
+      await clearConnectionsForUser(userId);
+      
+      // Save new connections
+      for (final connection in connections) {
+        await _connectionsBox!.put('${userId}_${connection.id}', connection);
+      }
+      
+      debugPrint('Cached ${connections.length} connections for user $userId');
+      return true;
+    } catch (e) {
+      debugPrint('Error caching connections: $e');
+      return false;
+    }
+  }
+  
+  /// Get cached connections for a user
+  List<LocalBusinessConnection> getCachedConnections(String userId, {Duration maxAge = const Duration(minutes: 5)}) {
+    try {
+      if (_connectionsBox == null) {
+        throw Exception('Connections box not initialized');
+      }
+      
+      final allConnections = _connectionsBox!.values
+          .where((connection) => connection.isForUser(userId))
+          .where((connection) => connection.isCacheValid(maxAge: maxAge))
+          .toList();
+      
+      debugPrint('Retrieved ${allConnections.length} cached connections for user $userId');
+      return allConnections;
+    } catch (e) {
+      debugPrint('Error getting cached connections: $e');
+      return [];
+    }
+  }
+  
+  /// Check if connections cache is valid for a user
+  bool isConnectionsCacheValid(String userId, {Duration maxAge = const Duration(minutes: 5)}) {
+    try {
+      if (_connectionsBox == null) return false;
+      
+      final connections = _connectionsBox!.values
+          .where((connection) => connection.isForUser(userId))
+          .toList();
+      
+      if (connections.isEmpty) return false;
+      
+      // Check if all connections are still valid
+      return connections.every((connection) => connection.isCacheValid(maxAge: maxAge));
+    } catch (e) {
+      debugPrint('Error checking connections cache validity: $e');
+      return false;
+    }
+  }
+  
+  /// Clear cached connections for a specific user
+  Future<bool> clearConnectionsForUser(String userId) async {
+    try {
+      if (_connectionsBox == null) {
+        throw Exception('Connections box not initialized');
+      }
+      
+      final keysToDelete = _connectionsBox!.keys
+          .where((key) => key.toString().startsWith('${userId}_'))
+          .toList();
+      
+      for (final key in keysToDelete) {
+        await _connectionsBox!.delete(key);
+      }
+      
+      debugPrint('Cleared ${keysToDelete.length} cached connections for user $userId');
+      return true;
+    } catch (e) {
+      debugPrint('Error clearing connections cache: $e');
+      return false;
+    }
+  }
+  
+  /// Clear all expired connections from cache
+  Future<bool> clearExpiredConnections({Duration maxAge = const Duration(minutes: 5)}) async {
+    try {
+      if (_connectionsBox == null) {
+        throw Exception('Connections box not initialized');
+      }
+      
+      final expiredKeys = <dynamic>[];
+      
+      for (final entry in _connectionsBox!.toMap().entries) {
+        if (!entry.value.isCacheValid(maxAge: maxAge)) {
+          expiredKeys.add(entry.key);
+        }
+      }
+      
+      for (final key in expiredKeys) {
+        await _connectionsBox!.delete(key);
+      }
+      
+      debugPrint('Cleared ${expiredKeys.length} expired connections from cache');
+      return true;
+    } catch (e) {
+      debugPrint('Error clearing expired connections: $e');
+      return false;
+    }
+  }
+  
+  /// Get cache statistics
+  Map<String, int> getConnectionsCacheStats() {
+    try {
+      if (_connectionsBox == null) {
+        return {'total': 0, 'valid': 0, 'expired': 0};
+      }
+      
+      final total = _connectionsBox!.length;
+      final valid = _connectionsBox!.values
+          .where((connection) => connection.isCacheValid())
+          .length;
+      final expired = total - valid;
+      
+      return {
+        'total': total,
+        'valid': valid,
+        'expired': expired,
+      };
+    } catch (e) {
+      debugPrint('Error getting cache stats: $e');
+      return {'total': 0, 'valid': 0, 'expired': 0};
+    }
+  }
+  
   /// Close Hive boxes
   Future<void> close() async {
     await _tripsBox?.close();
     await _locationsBox?.close();
+    await _connectionsBox?.close();
   }
 }

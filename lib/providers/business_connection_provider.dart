@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/business_connection_model.dart';
+import '../models/local_business_connection.dart';
 import '../services/supabase/supabase_client.dart';
 import '../services/notifications/notification_provider.dart';
+import '../services/local_storage_service.dart';
 
 class BusinessConnectionProvider extends ChangeNotifier {
   List<BusinessConnection> _connections = [];
@@ -371,9 +373,10 @@ class BusinessConnectionProvider extends ChangeNotifier {
     }
 
     return _connections.where((connection) {
-      // Filter by search query
+      // Filter by search query (name or country)
       bool matchesSearch = _searchQuery.isEmpty ||
-          connection.name.toLowerCase().contains(_searchQuery.toLowerCase());
+          connection.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (connection.location?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
 
       // Filter by SDG
       bool matchesSDG = _sdgFilter == null ||
@@ -389,9 +392,10 @@ class BusinessConnectionProvider extends ChangeNotifier {
     }
 
     return _discoverProfiles.where((profile) {
-      // Filter by search query
+      // Filter by search query (name or country)
       bool matchesSearch = _searchQuery.isEmpty ||
-          profile.name.toLowerCase().contains(_searchQuery.toLowerCase());
+          profile.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (profile.location?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
 
       // Filter by SDG
       bool matchesSDG = _sdgFilter == null ||
@@ -414,7 +418,8 @@ class BusinessConnectionProvider extends ChangeNotifier {
   }
 
   // Fetch connections from Supabase
-  Future<void> fetchConnections() async {
+  /// Fetch connections with caching support
+  Future<void> fetchConnections({bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -430,58 +435,168 @@ class BusinessConnectionProvider extends ChangeNotifier {
         return;
       }
 
-      // First get business connections
-      final connectionsResponse = await client
-          .from('business_connections')
-          .select()
-          .eq('user_id', userId)
-          .eq('status', 'accepted');
-
-      List<BusinessConnection> connections = [];
-
-      // For each connection, fetch the profile data
-      for (var connection in connectionsResponse as List) {
-        final connectionData = BusinessConnection.fromJson(connection);
-
-        try {
-          // Fetch profile data for the counterparty
-          final profileResponse = await client
-              .from('profiles')
-              .select()
-              .eq('id', connectionData.counterpartyId)
-              .single();
-
-          // Fetch SDG data for the counterparty
-          final sdgResponse = await client
-              .from('user_sdgs')
-              .select('sdg_id')
-              .eq('user_id', connectionData.counterpartyId);
-
-          // Extract SDG IDs
-          List<int> sdgGoals = [];
-          if (sdgResponse != null) {
-            sdgGoals = (sdgResponse as List).map((sdg) => sdg['sdg_id'] as int).toList();
-          }
-
-          // Update connection with profile data
-          connectionData.name = '${profileResponse['first_name']} ${profileResponse['last_name']}';
-          connectionData.profileImageUrl = profileResponse['avatar_url'];
-          connectionData.title = profileResponse['headline'];
-          connectionData.location = profileResponse['country'];
-          connectionData.sdgGoals = sdgGoals;
-
-          connections.add(connectionData);
-        } catch (e) {
-          debugPrint('Error fetching profile for connection ${connectionData.id}: $e');
+      // Try to load from cache first (unless force refresh)
+      if (!forceRefresh) {
+        final cachedConnections = await _loadConnectionsFromCache(userId);
+        if (cachedConnections != null) {
+          _connections = cachedConnections;
+          _isLoading = false;
+          notifyListeners();
+          debugPrint('✅ Loaded ${cachedConnections.length} connections from cache');
+          return;
         }
       }
 
+      // Cache miss or force refresh - fetch from server
+      debugPrint('🔄 Cache miss or force refresh - fetching connections from server');
+      final connections = await _fetchConnectionsFromServer(userId);
+      
       _connections = connections;
+      
+      // Cache the results for next time
+      await _cacheConnections(connections, userId);
+      
     } catch (e) {
       _error = e.toString();
+      debugPrint('❌ Error fetching connections: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+  
+  /// Load connections from cache if valid
+  Future<List<BusinessConnection>?> _loadConnectionsFromCache(String userId) async {
+    try {
+      final storage = LocalStorageService.instance;
+      
+      // Check if cache is valid (5 minutes)
+      if (!storage.isConnectionsCacheValid(userId, maxAge: const Duration(minutes: 5))) {
+        debugPrint('📦 Cache invalid or expired for user $userId');
+        return null;
+      }
+      
+      final cachedConnections = storage.getCachedConnections(userId);
+      if (cachedConnections.isEmpty) {
+        debugPrint('📦 No cached connections found for user $userId');
+        return null;
+      }
+      
+      // Convert to BusinessConnection objects
+      final connections = cachedConnections
+          .map((cached) => cached.toBusinessConnection())
+          .toList();
+      
+      debugPrint('📦 Loaded ${connections.length} connections from cache');
+      return connections;
+    } catch (e) {
+      debugPrint('❌ Error loading connections from cache: $e');
+      return null;
+    }
+  }
+  
+  /// Fetch connections from server (original logic)
+  Future<List<BusinessConnection>> _fetchConnectionsFromServer(String userId) async {
+    final client = SupabaseService.client;
+    
+    // First get business connections
+    final connectionsResponse = await client
+        .from('business_connections')
+        .select()
+        .eq('user_id', userId)
+        .eq('status', 'accepted');
+
+    List<BusinessConnection> connections = [];
+
+    // For each connection, fetch the profile data
+    for (var connection in connectionsResponse as List) {
+      final connectionData = BusinessConnection.fromJson(connection);
+
+      try {
+        // Fetch profile data for the counterparty
+        final profileResponse = await client
+            .from('profiles')
+            .select()
+            .eq('id', connectionData.counterpartyId)
+            .single();
+
+        // Fetch SDG data for the counterparty
+        final sdgResponse = await client
+            .from('user_sdgs')
+            .select('sdg_id')
+            .eq('user_id', connectionData.counterpartyId);
+
+        // Extract SDG IDs
+        List<int> sdgGoals = [];
+        if (sdgResponse != null) {
+          sdgGoals = (sdgResponse as List).map((sdg) => sdg['sdg_id'] as int).toList();
+        }
+
+        // Update connection with profile data
+        connectionData.name = '${profileResponse['first_name']} ${profileResponse['last_name']}';
+        connectionData.profileImageUrl = profileResponse['avatar_url'];
+        connectionData.title = profileResponse['headline'];
+        connectionData.location = profileResponse['country'];
+        connectionData.sdgGoals = sdgGoals;
+
+        connections.add(connectionData);
+      } catch (e) {
+        debugPrint('Error fetching profile for connection ${connectionData.id}: $e');
+      }
+    }
+    
+    debugPrint('🌐 Fetched ${connections.length} connections from server');
+    return connections;
+  }
+  
+  /// Cache connections for faster loading
+  Future<void> _cacheConnections(List<BusinessConnection> connections, String userId) async {
+    try {
+      final storage = LocalStorageService.instance;
+      
+      // Convert to LocalBusinessConnection objects
+      final localConnections = connections
+          .map((connection) => LocalBusinessConnection.fromBusinessConnection(connection, userId))
+          .toList();
+      
+      await storage.cacheConnections(localConnections, userId);
+      debugPrint('💾 Cached ${connections.length} connections for user $userId');
+    } catch (e) {
+      debugPrint('❌ Error caching connections: $e');
+      // Don't throw - caching failure shouldn't break the app
+    }
+  }
+  
+  /// Force refresh connections from server (bypasses cache)
+  Future<void> refreshConnections() async {
+    debugPrint('🔄 Force refreshing connections from server');
+    await fetchConnections(forceRefresh: true);
+  }
+  
+  /// Clear connections cache for current user
+  Future<void> clearConnectionsCache() async {
+    try {
+      final client = SupabaseService.client;
+      final userId = client.auth.currentUser?.id;
+      
+      if (userId != null) {
+        final storage = LocalStorageService.instance;
+        await storage.clearConnectionsForUser(userId);
+        debugPrint('🧽 Cleared connections cache for user $userId');
+      }
+    } catch (e) {
+      debugPrint('❌ Error clearing connections cache: $e');
+    }
+  }
+  
+  /// Get cache statistics for debugging
+  Map<String, int> getConnectionsCacheStats() {
+    try {
+      final storage = LocalStorageService.instance;
+      return storage.getConnectionsCacheStats();
+    } catch (e) {
+      debugPrint('❌ Error getting cache stats: $e');
+      return {'total': 0, 'valid': 0, 'expired': 0};
     }
   }
 
@@ -684,7 +799,7 @@ class BusinessConnectionProvider extends ChangeNotifier {
           .update(connection.toJson())
           .eq('id', connection.id);
       
-      await fetchConnections(); // Refresh the list
+      await fetchConnections(forceRefresh: true); // Refresh the list
     } catch (e) {
       _isLoading = false;
       _error = 'Failed to update connection: $e';
@@ -704,7 +819,7 @@ class BusinessConnectionProvider extends ChangeNotifier {
           .delete()
           .eq('id', connectionId);
       
-      await fetchConnections(); // Refresh the list
+      await fetchConnections(forceRefresh: true); // Refresh the list
     } catch (e) {
       _isLoading = false;
       _error = 'Failed to delete connection: $e';
@@ -761,59 +876,11 @@ class BusinessConnectionProvider extends ChangeNotifier {
         
         debugPrint('🔍 All existing connections between users: $existingConnections');
         
-        // Check if a reciprocal connection exists (where current user is the sender)
-        bool hasReciprocalConnection = false;
-        String? reciprocalConnectionId;
+        // FIXED LOGIC: Simply update the original pending connection to 'accepted'
+        // This creates a proper bidirectional connection without duplicate records
+        debugPrint('✅ Updating the original pending connection to accepted status');
         
-        if (existingConnections != null && existingConnections is List) {
-          for (var conn in existingConnections) {
-            if (conn['user_id'] == originalCounterpartyId && conn['counterparty_id'] == originalUserId) {
-              hasReciprocalConnection = true;
-              reciprocalConnectionId = conn['id'];
-              debugPrint('✅ Found existing reciprocal connection: ${conn['id']}');
-              break;
-            }
-          }
-        }
-        
-        // If no reciprocal connection exists, create one with status 'accepted'
-        if (!hasReciprocalConnection) {
-          debugPrint('✅ No reciprocal connection found, creating one with status "accepted"');
-          
-          // Create a new reciprocal connection with status 'accepted'
-          final insertResponse = await client
-              .from('business_connections')
-              .insert({
-                'user_id': originalCounterpartyId,
-                'counterparty_id': originalUserId,
-                'status': 'accepted',
-                'relationship_type': 'professional',
-              })
-              .select();
-          
-          debugPrint('✅ Created new reciprocal connection: $insertResponse');
-          
-          if (insertResponse != null && insertResponse is List && insertResponse.isNotEmpty) {
-            reciprocalConnectionId = insertResponse[0]['id'];
-          }
-        } else {
-          // Reciprocal connection exists, update it to 'accepted'
-          debugPrint('✅ Reciprocal connection found, updating to "accepted"');
-          
-          if (reciprocalConnectionId != null) {
-            final updateReciprocalResponse = await client
-                .from('business_connections')
-                .update({
-                  'status': 'accepted', 
-                  'updated_at': DateTime.now().toIso8601String()
-                })
-                .eq('id', reciprocalConnectionId);
-                
-            debugPrint('✅ Updated reciprocal connection $reciprocalConnectionId to accepted: $updateReciprocalResponse');
-          }
-        }
-        
-        // Now update the original connection to 'accepted'
+        // Update the original connection to 'accepted'
         final updateResponse = await client
             .from('business_connections')
             .update({
@@ -822,19 +889,26 @@ class BusinessConnectionProvider extends ChangeNotifier {
             })
             .eq('id', connectionId);
         
-        debugPrint('✅ Update original connection response: $updateResponse');
+        debugPrint('✅ Updated original connection to accepted: $updateResponse');
         
-        // CRITICAL FIX: Update ALL connections between these users to 'accepted'
-        // This ensures we don't have any lingering 'pending' connections
-        final directUpdateAllResponse = await client
-            .from('business_connections')
-            .update({
-              'status': 'accepted', 
-              'updated_at': DateTime.now().toIso8601String()
-            })
-            .or('and(user_id.eq.$originalUserId,counterparty_id.eq.$originalCounterpartyId),and(user_id.eq.$originalCounterpartyId,counterparty_id.eq.$originalUserId)');
-            
-        debugPrint('✅ Direct update ALL connections response: $directUpdateAllResponse');
+        // Check if there are any other connections between these users that need updating
+        if (existingConnections != null && existingConnections is List) {
+          for (var conn in existingConnections) {
+            if (conn['id'] != connectionId && conn['status'] == 'pending') {
+              debugPrint('✅ Found additional pending connection, updating to accepted: ${conn['id']}');
+              
+              final additionalUpdateResponse = await client
+                  .from('business_connections')
+                  .update({
+                    'status': 'accepted', 
+                    'updated_at': DateTime.now().toIso8601String()
+                  })
+                  .eq('id', conn['id']);
+                  
+              debugPrint('✅ Updated additional connection to accepted: $additionalUpdateResponse');
+            }
+          }
+        }
         
         // Add a small delay to ensure database consistency
         await Future.delayed(const Duration(milliseconds: 500));
@@ -870,7 +944,7 @@ class BusinessConnectionProvider extends ChangeNotifier {
       
       // Refresh data after server operations
       debugPrint('🔄 Refreshing connections and discover profiles');
-      await fetchConnections();
+      await fetchConnections(forceRefresh: true);
       await fetchDiscoverProfiles();
       
       // Force refresh of invitations to ensure they're up to date
@@ -933,7 +1007,7 @@ class BusinessConnectionProvider extends ChangeNotifier {
       debugPrint('✅ Update response: $updateResponse');
       
       // Refresh connections
-      await fetchConnections();
+      await fetchConnections(forceRefresh: true);
       
       debugPrint('✅ Connection request rejected');
       return true;

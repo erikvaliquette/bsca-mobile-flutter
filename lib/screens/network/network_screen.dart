@@ -68,24 +68,26 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Network'),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Theme.of(context).colorScheme.primary,
-          tabs: const [
-            Tab(text: 'My Connections'),
-            Tab(text: 'Discover'),
-            Tab(text: 'Invitations'),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          // Search and Filter Bar
-          Container(
+      body: SafeArea(
+        child: Column(
+          children: [
+            // TabBar moved to top with padding for notch/dynamic island
+            Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: TabBar(
+                controller: _tabController,
+                labelColor: Theme.of(context).colorScheme.primary,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Theme.of(context).colorScheme.primary,
+                tabs: const [
+                  Tab(text: 'My Connections'),
+                  Tab(text: 'Discover'),
+                  Tab(text: 'Invitations'),
+                ],
+              ),
+            ),
+            // Search and Filter Bar
+            Container(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
@@ -93,7 +95,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Search by name...',
+                    hintText: 'Search by name or country...',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
@@ -410,6 +412,7 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
             ),
           ),
         ],
+        ),
       ),
     );
   }

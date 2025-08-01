@@ -71,6 +71,9 @@ dependencies:
   timeago: ^3.6.0
   uuid: ^4.2.1
   flutter_hooks: ^0.21.2
+  device_info_plus: ^10.1.2
+  package_info_plus: ^8.0.2
+  font_awesome_flutter: ^10.7.0
 
   # Local Storage
   hive: ^2.2.3

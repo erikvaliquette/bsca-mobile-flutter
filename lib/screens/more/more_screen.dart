@@ -7,7 +7,9 @@ import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
 import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/travel_emissions/my_travel_emissions_screen.dart';
-import 'package:bsca_mobile_flutter/screens/more/notification_test_screen.dart';
+
+import 'package:bsca_mobile_flutter/screens/more/help_support_screen.dart';
+import 'package:bsca_mobile_flutter/screens/more/about_screen.dart';
 import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
 import 'package:bsca_mobile_flutter/widgets/notification_badge.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
@@ -99,6 +101,22 @@ class _MoreScreenState extends State<MoreScreen> {
           MaterialPageRoute(builder: (context) => const SolutionsScreen()),
         ),
       ),
+      MoreMenuItem(
+        title: 'Help & Support',
+        icon: Icons.help,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
+        ),
+      ),
+      MoreMenuItem(
+        title: 'About',
+        icon: Icons.info,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AboutScreen()),
+        ),
+      ),
       // Notification Test button removed as notifications are now working properly
     ];
 
@@ -149,14 +167,7 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
-  void _navigateToScreen(BuildContext context, String screenName) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlaceholderDetailScreen(title: screenName),
-      ),
-    );
-  }
+
 }
 
 class MoreMenuItem {
@@ -193,7 +204,7 @@ class PlaceholderDetailScreen extends StatelessWidget {
             Icon(
               _getIconForTitle(title),
               size: 80,
-              color: Colors.grey.withOpacity(0.5),
+              color: Colors.grey.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 24),
             Text(
