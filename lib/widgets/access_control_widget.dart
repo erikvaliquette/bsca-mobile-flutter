@@ -315,7 +315,7 @@ class SubscriptionStatusWidget extends StatelessWidget {
                         color: _getStatusColor(subscription.serviceLevel),
                       ),
                     ),
-                    if (showDetails && subscription.isExpiringSoon) ...[
+                    if (showDetails && subscription.isExpiringSoon()) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Expires in ${subscription.daysUntilExpiration} days',
@@ -339,12 +339,12 @@ class SubscriptionStatusWidget extends StatelessWidget {
     switch (level) {
       case ServiceLevel.free:
         return Colors.grey;
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return Colors.blue;
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return Colors.purple;
-      case ServiceLevel.premium:
-        return Colors.gold;
+      case ServiceLevel.impactPartner:
+        return Colors.amber;
     }
   }
 
@@ -352,11 +352,11 @@ class SubscriptionStatusWidget extends StatelessWidget {
     switch (level) {
       case ServiceLevel.free:
         return Icons.person_outline;
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return Icons.star_border;
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return Icons.star_half;
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return Icons.star;
     }
   }

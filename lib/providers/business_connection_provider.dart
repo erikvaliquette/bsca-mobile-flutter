@@ -5,6 +5,8 @@ import '../models/local_business_connection.dart';
 import '../services/supabase/supabase_client.dart';
 import '../services/notifications/notification_provider.dart';
 import '../services/local_storage_service.dart';
+import '../services/subscription_helper.dart';
+import '../services/subscription_service.dart';
 
 class BusinessConnectionProvider extends ChangeNotifier {
   List<BusinessConnection> _connections = [];
@@ -735,6 +737,43 @@ class BusinessConnectionProvider extends ChangeNotifier {
     }
   }
 
+  // Check if user has reached the connection limit for their subscription tier
+  Future<bool> _hasReachedConnectionLimit() async {
+    try {
+      // Get current service level
+      final serviceLevel = await SubscriptionHelper.getCurrentServiceLevel();
+      
+      // If not on free tier, no limit applies
+      if (serviceLevel != ServiceLevel.free) {
+        return false;
+      }
+      
+      // For free tier, check if they've reached the 100 connection limit
+      final client = SupabaseService.client;
+      final userId = client.auth.currentUser?.id;
+      
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // Count all accepted connections
+      final connectionCount = await client
+          .from('business_connections')
+          .select('id')
+          .or('and(user_id.eq.$userId,status.eq.accepted),and(counterparty_id.eq.$userId,status.eq.accepted)')
+          .count(CountOption.exact);
+      
+      final count = connectionCount.count ?? 0;
+      debugPrint('📊 Current connection count: $count (Limit for free tier: 100)');
+      
+      // Return true if limit reached
+      return count >= 100;
+    } catch (e) {
+      debugPrint('❌ Error checking connection limit: $e');
+      return false; // Default to allowing the connection if there's an error
+    }
+  }
+
   Future<void> sendConnectionRequest(String counterpartyId) async {
     try {
       final client = SupabaseService.client;
@@ -742,6 +781,12 @@ class BusinessConnectionProvider extends ChangeNotifier {
 
       if (userId == null) {
         throw Exception('User not authenticated');
+      }
+      
+      // Check if user has reached connection limit
+      final hasReachedLimit = await _hasReachedConnectionLimit();
+      if (hasReachedLimit) {
+        throw Exception('CONNECTION_LIMIT_REACHED');
       }
       
       // IMPORTANT: First check if a connection already exists in either direction

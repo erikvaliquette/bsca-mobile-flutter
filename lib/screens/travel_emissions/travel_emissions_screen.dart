@@ -15,6 +15,7 @@ import '../../services/connectivity_service.dart';
 import '../../services/trip_attribution_service.dart';
 import '../../services/location_service.dart';
 import '../../services/travel_emissions_service.dart';
+import '../../services/subscription_helper.dart';
 import '../../widgets/loading_indicator.dart';
 import 'package:provider/provider.dart';
 import 'trip_reconciliation_screen.dart';
@@ -591,7 +592,24 @@ class TravelEmissionsScreen extends HookWidget {
       try {
         // Handle organization attribution for business trips
         String? selectedOrganizationId;
-        if (currentTrip.value?.purpose == 'Business') {
+        if (selectedPurpose.value == 'Business') {
+          // Check if user has access to business trip attribution feature
+          final canAccessBusinessTrips = await SubscriptionHelper.canAccessFeature(
+            SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION
+          );
+          
+          if (!canAccessBusinessTrips) {
+            // Show upgrade prompt and revert to Personal
+            await SubscriptionHelper.showUpgradePromptIfNeeded(
+              context,
+              SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION,
+              customMessage: 'Business trip attribution is available in Professional tier and above.'
+            );
+            // Reset to Personal - directly update the value notifier
+            selectedPurpose.value = 'Personal';
+            return;
+          }
+          
           final organizationProvider = Provider.of<OrganizationProvider>(context, listen: false);
           final organizations = organizationProvider.organizations;
           

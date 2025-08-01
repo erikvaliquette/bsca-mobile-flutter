@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/travel_emissions_service.dart';
+import '../../services/subscription_helper.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../widgets/upgrade_prompt_widget.dart';
 
 class MyTravelEmissionsScreen extends StatefulWidget {
   const MyTravelEmissionsScreen({Key? key}) : super(key: key);
@@ -468,38 +470,91 @@ class _MyTravelEmissionsScreenState extends State<MyTravelEmissionsScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          children: _emissionsByPurpose.entries.map((entry) {
-            final percentage = (_emissionsByPurpose[entry.key]! / _totalEmissions) * 100;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      entry.key,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: LinearProgressIndicator(
-                      value: percentage / 100,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        entry.key == 'Business' ? Colors.orange : Colors.blue,
+          children: [
+            // Add business trip upgrade prompt if needed
+            FutureBuilder<bool>(
+              future: SubscriptionHelper.canAccessFeature(SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox.shrink();
+                }
+                
+                final canAccessBusinessTrips = snapshot.data ?? false;
+                
+                if (!canAccessBusinessTrips && _emissionsByPurpose.containsKey('Business')) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Container(
+                      padding: const EdgeInsets.all(12.0),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8.0),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.amber.shade800),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: const Text(
+                              'Upgrade to Professional tier to attribute trips to business purposes',
+                              style: TextStyle(fontSize: 14),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => UpgradePromptWidget(
+                                  featureKey: SubscriptionHelper.FEATURE_BUSINESS_TRIP_ATTRIBUTION,
+                                  customMessage: 'Business trip attribution is available in Professional tier and above.',
+                                  isDialog: true,
+                                ),
+                              );
+                            },
+                            child: const Text('UPGRADE'),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${entry.value.toStringAsFixed(1)} kg',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+            ..._emissionsByPurpose.entries.map((entry) {
+              final percentage = (_emissionsByPurpose[entry.key]! / _totalEmissions) * 100;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        entry.key,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: LinearProgressIndicator(
+                        value: percentage / 100,
+                        backgroundColor: Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          entry.key == 'Business' ? Colors.orange : Colors.blue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${entry.value.toStringAsFixed(1)} kg',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
         ),
       ),
     );

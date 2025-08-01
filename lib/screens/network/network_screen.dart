@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../models/business_connection_model.dart';
 import '../../providers/business_connection_provider.dart';
 import '../../providers/message_provider.dart';
+import '../../services/subscription_helper.dart';
+import '../../widgets/upgrade_prompt_widget.dart';
 import '../../services/notifications/notification_provider.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../utils/sdg_icons.dart';
@@ -531,9 +533,23 @@ class _NetworkScreenState extends State<NetworkScreen> with TickerProviderStateM
         SnackBar(content: Text('Connection request sent to ${profile.name}')),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending connection request: $e')),
-      );
+      // Check if the error is due to connection limit
+      if (e.toString().contains('CONNECTION_LIMIT_REACHED')) {
+        // Show upgrade prompt for connection limit
+        showDialog(
+          context: context,
+          builder: (context) => UpgradePromptWidget(
+            featureKey: SubscriptionHelper.FEATURE_UNLIMITED_CONNECTIONS,
+            customMessage: 'Free tier is limited to 100 network connections. Upgrade to Professional tier for unlimited connections.',
+            isDialog: true,
+          ),
+        );
+      } else {
+        // Handle other errors
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending connection request: $e')),
+        );
+      }
     }
   }
   

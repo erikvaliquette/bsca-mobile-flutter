@@ -11,8 +11,28 @@ import 'package:bsca_mobile_flutter/screens/travel_emissions/my_travel_emissions
 import 'package:bsca_mobile_flutter/screens/more/help_support_screen.dart';
 import 'package:bsca_mobile_flutter/screens/more/about_screen.dart';
 import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
+import 'package:bsca_mobile_flutter/services/subscription_helper.dart';
+import 'package:bsca_mobile_flutter/services/subscription_service.dart';
 import 'package:bsca_mobile_flutter/widgets/notification_badge.dart';
+import 'package:bsca_mobile_flutter/widgets/upgrade_prompt_widget.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
+
+// Define the MoreMenuItem class outside of the widget classes
+class MoreMenuItem {
+  final String title;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool hasNotificationBadge;
+  final NotificationType? notificationType;
+
+  MoreMenuItem({
+    required this.title,
+    required this.icon,
+    required this.onTap,
+    this.hasNotificationBadge = false,
+    this.notificationType,
+  });
+}
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -35,90 +55,115 @@ class _MoreScreenState extends State<MoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // List of menu items for the More tab
-    final List<MoreMenuItem> menuItems = [
-      MoreMenuItem(
-        title: 'My Profile',
-        icon: Icons.person,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfileScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'Actions',
-        icon: Icons.play_arrow,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ActionsScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'My Travel Emissions',
-        icon: Icons.analytics,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const MyTravelEmissionsScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'Organization',
-        icon: Icons.business,
-        onTap: () {
-          // Clear organization notifications when navigating to the Organization screen
-          final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
-          notificationProvider.clearOrganizationNotifications();
+    return FutureBuilder<ServiceLevel>(
+      future: SubscriptionHelper.getCurrentServiceLevel(),
+      builder: (context, snapshot) {
+        // Default to free tier if service level is not yet loaded
+        final serviceLevel = snapshot.data ?? ServiceLevel.free;
+        
+        // List of menu items for the More tab
+        final List<MoreMenuItem> menuItems = [
+          MoreMenuItem(
+            title: 'My Profile',
+            icon: Icons.person,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ProfileScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'Actions',
+            icon: Icons.play_arrow,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ActionsScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'My Travel Emissions',
+            icon: Icons.analytics,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MyTravelEmissionsScreen()),
+            ),
+          ),
           
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const OrganizationScreen()),
-          );
-        },
-        hasNotificationBadge: true,
-        notificationType: NotificationType.organization,
-      ),
-      MoreMenuItem(
-        title: 'SDG Marketplace',
-        icon: Icons.shopping_cart,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SDGMarketplaceScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'Carbon Calculator',
-        icon: Icons.calculate,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const CarbonCalculatorScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'Solutions',
-        icon: Icons.lightbulb,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SolutionsScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'Help & Support',
-        icon: Icons.help,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
-        ),
-      ),
-      MoreMenuItem(
-        title: 'About',
-        icon: Icons.info,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const AboutScreen()),
-        ),
-      ),
-      // Notification Test button removed as notifications are now working properly
-    ];
+          // Only show Organization menu item for paid tiers
+          if (serviceLevel != ServiceLevel.free)
+            MoreMenuItem(
+              title: 'Organization',
+              icon: Icons.business,
+              onTap: () {
+                // Clear organization notifications when navigating to the Organization screen
+                final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+                notificationProvider.clearOrganizationNotifications();
+                
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const OrganizationScreen()),
+                );
+              },
+              hasNotificationBadge: true,
+              notificationType: NotificationType.organization,
+            )
+          else
+            MoreMenuItem(
+              title: 'Organization',
+              icon: Icons.business,
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => UpgradePromptWidget(
+                    featureKey: SubscriptionHelper.FEATURE_ORGANIZATION_ACCESS,
+                    customMessage: 'Organization access is available in Professional tier and above.',
+                    isDialog: true,
+                  ),
+                );
+              },
+            ),
+          
+          MoreMenuItem(
+            title: 'SDG Marketplace',
+            icon: Icons.shopping_cart,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SDGMarketplaceScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'Carbon Calculator',
+            icon: Icons.calculate,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CarbonCalculatorScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'Solutions',
+            icon: Icons.lightbulb,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SolutionsScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'Help & Support',
+            icon: Icons.help_outline,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'About',
+            icon: Icons.info_outline,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AboutScreen()),
+            ),
+          ),
+          // Notification Test button removed as notifications are now working properly
+        ];
 
     return Scaffold(
       appBar: AppBar(
@@ -165,80 +210,6 @@ class _MoreScreenState extends State<MoreScreen> {
         },
       ),
     );
-  }
-
-
-}
-
-class MoreMenuItem {
-  final String title;
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool hasNotificationBadge;
-  final NotificationType? notificationType;
-
-  MoreMenuItem({
-    required this.title,
-    required this.icon,
-    required this.onTap,
-    this.hasNotificationBadge = false,
-    this.notificationType,
   });
 }
-
-class PlaceholderDetailScreen extends StatelessWidget {
-  final String title;
-
-  const PlaceholderDetailScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _getIconForTitle(title),
-              size: 80,
-              color: Colors.grey.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '$title Coming Soon',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'This feature is currently being developed.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _getIconForTitle(String title) {
-    switch (title) {
-      case 'Actions':
-        return Icons.play_arrow;
-      case 'Organization':
-        return Icons.business;
-      case 'SDG Marketplace':
-        return Icons.shopping_cart;
-      case 'Carbon Calculator':
-        return Icons.calculate;
-      case 'Solutions':
-        return Icons.lightbulb;
-      default:
-        return Icons.info;
-    }
-  }
 }

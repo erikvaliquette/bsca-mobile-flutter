@@ -224,11 +224,27 @@ class SubscriptionGatedWidget extends StatelessWidget {
     this.alternativeWidget,
   }) : super(key: key);
   
+  // Helper method to check if current tier has access to required tier
+  bool _hasRequiredTierAccess(ServiceLevel currentLevel, ServiceLevel requiredTier) {
+    // Define tier hierarchy
+    final tierValues = {
+      ServiceLevel.free: 0,
+      ServiceLevel.professional: 1,
+      ServiceLevel.enterprise: 2,
+      ServiceLevel.impactPartner: 3,
+    };
+    
+    // Compare tier levels
+    return tierValues[currentLevel]! >= tierValues[requiredTier]!;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SubscriptionProvider>(
       builder: (context, subscriptionProvider, _) {
-        final hasAccess = subscriptionProvider.canAccessTier(requiredTier);
+        // Check if current service level is equal to or higher than required tier
+        final currentLevel = subscriptionProvider.currentServiceLevel;
+        final hasAccess = _hasRequiredTierAccess(currentLevel, requiredTier);
         
         if (hasAccess) {
           return child;

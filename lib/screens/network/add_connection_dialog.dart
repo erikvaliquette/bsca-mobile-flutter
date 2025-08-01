@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/business_connection_provider.dart';
 import '../../services/supabase/supabase_client.dart';
+import '../../services/subscription_helper.dart';
+import '../../widgets/upgrade_prompt_widget.dart';
 
 class AddConnectionDialog extends StatefulWidget {
   const AddConnectionDialog({super.key});
@@ -132,10 +134,26 @@ class _AddConnectionDialogState extends State<AddConnectionDialog> {
         );
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      // Check if the error is due to connection limit
+      if (e.toString().contains('CONNECTION_LIMIT_REACHED')) {
+        if (mounted) {
+          // Show upgrade prompt for connection limit
+          showDialog(
+            context: context,
+            builder: (context) => UpgradePromptWidget(
+              featureKey: SubscriptionHelper.FEATURE_UNLIMITED_CONNECTIONS,
+              customMessage: 'Free tier is limited to 100 network connections. Upgrade to Professional tier for unlimited connections.',
+              isDialog: true,
+            ),
+          );
+        }
+      } else {
+        // Handle other errors
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/business_connection_model.dart';
 import '../../providers/business_connection_provider.dart';
+import '../../services/subscription_helper.dart';
+import '../../widgets/upgrade_prompt_widget.dart';
 import '../../services/supabase/supabase_client.dart';
 import '../../widgets/sdg_icon_widget.dart';
 import '../../widgets/validation_status_widget.dart';
@@ -97,10 +99,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending connection request: $e')),
-        );
+      // Check if the error is due to connection limit
+      if (e.toString().contains('CONNECTION_LIMIT_REACHED')) {
+        if (mounted) {
+          // Show upgrade prompt for connection limit
+          showDialog(
+            context: context,
+            builder: (context) => UpgradePromptWidget(
+              featureKey: SubscriptionHelper.FEATURE_UNLIMITED_CONNECTIONS,
+              customMessage: 'Free tier is limited to 100 network connections. Upgrade to Professional tier for unlimited connections.',
+              isDialog: true,
+            ),
+          );
+        }
+      } else {
+        // Handle other errors
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error sending connection request: $e')),
+          );
+        }
       }
     }
   }

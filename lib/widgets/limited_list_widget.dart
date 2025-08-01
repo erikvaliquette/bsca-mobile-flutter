@@ -130,11 +130,21 @@ class LimitedListWidget<T> extends StatelessWidget {
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: () {
-                  SubscriptionUpgradeDialog.show(
-                    context: context,
-                    featureDescription: 'Access to all $featureDescription',
-                    requiredTier: nextTier,
-                  );
+                  // Make sure nextTier is not null before passing it
+                  if (nextTier != null) {
+                    SubscriptionUpgradeDialog.show(
+                      context: context,
+                      featureDescription: 'Access to all $featureDescription',
+                      requiredTier: nextTier,
+                    );
+                  } else {
+                    // Fallback to professional tier if nextTier is null
+                    SubscriptionUpgradeDialog.show(
+                      context: context,
+                      featureDescription: 'Access to all $featureDescription',
+                      requiredTier: ServiceLevel.professional,
+                    );
+                  }
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Theme.of(context).colorScheme.primary,
