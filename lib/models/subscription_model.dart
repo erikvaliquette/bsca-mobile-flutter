@@ -42,7 +42,9 @@ class SubscriptionModel {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : null,
-      billingHistory: json['billing_history'] ?? [],
+      billingHistory: json['billing_history'] is Map ? 
+          (json['billing_history']['transactions'] ?? []) : 
+          (json['billing_history'] ?? []),
       serviceLevel: ServiceLevel.fromString(json['service_level'] ?? 'GENESIS'),
     );
   }

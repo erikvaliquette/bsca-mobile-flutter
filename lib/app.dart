@@ -5,6 +5,9 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/pricing_screen.dart';
+import 'screens/subscription_management_screen.dart';
+import 'screens/account_screen.dart';
 
 class BscaApp extends StatelessWidget {
   const BscaApp({super.key});
@@ -47,6 +50,9 @@ class BscaApp extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/home': (context) => const HomeScreen(),
+        '/pricing': (context) => const PricingScreen(),
+        '/subscription': (context) => const SubscriptionManagementScreen(),
+        '/account': (context) => const AccountScreen(),
       },
     );
   }

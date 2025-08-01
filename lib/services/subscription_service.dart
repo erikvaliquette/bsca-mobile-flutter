@@ -80,7 +80,7 @@ class SubscriptionService {
     String? stripeCustomerId,
     String? stripeSubscriptionId,
     DateTime? currentPeriodEnd,
-    Map<String, dynamic>? billingHistory,
+    dynamic billingHistory,
   }) async {
     try {
       final data = {
@@ -147,7 +147,7 @@ class SubscriptionService {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return {
           'max_connections': -1, // unlimited
           'business_trip_attribution': true,
@@ -158,7 +158,7 @@ class SubscriptionService {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return {
           'max_connections': -1, // unlimited
           'business_trip_attribution': true,
@@ -169,7 +169,7 @@ class SubscriptionService {
           'api_access': false,
           'priority_support': true,
         };
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return {
           'max_connections': -1, // unlimited
           'business_trip_attribution': true,
@@ -187,9 +187,9 @@ class SubscriptionService {
 /// Enum for service levels
 enum ServiceLevel {
   free,
-  basic,
-  advanced,
-  premium;
+  professional,
+  enterprise,
+  impactPartner;
 
   /// Convert from database string to enum
   static ServiceLevel fromString(String value) {
@@ -198,15 +198,17 @@ enum ServiceLevel {
       case 'free':
         return ServiceLevel.free;
       case 'node':
-      case 'basic':
-        return ServiceLevel.basic;
+      case 'professional':
+        return ServiceLevel.professional;
       case 'smart chain':
       case 'smart_chain':
-      case 'advanced':
-        return ServiceLevel.advanced;
+      case 'enterprise':
+        return ServiceLevel.enterprise;
       case 'network':
-      case 'premium':
-        return ServiceLevel.premium;
+      case 'impact partner':
+      case 'impact_partner':
+      case 'impactpartner':
+        return ServiceLevel.impactPartner;
       default:
         return ServiceLevel.free;
     }
@@ -217,11 +219,11 @@ enum ServiceLevel {
     switch (this) {
       case ServiceLevel.free:
         return 'GENESIS'; // Keep existing database values for now
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return 'NODE';
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return 'SMART CHAIN';
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return 'NETWORK';
     }
   }
@@ -231,12 +233,12 @@ enum ServiceLevel {
     switch (this) {
       case ServiceLevel.free:
         return 'Free';
-      case ServiceLevel.basic:
-        return 'Basic';
-      case ServiceLevel.advanced:
-        return 'Advanced';
-      case ServiceLevel.premium:
-        return 'Premium';
+      case ServiceLevel.professional:
+        return 'Professional';
+      case ServiceLevel.enterprise:
+        return 'Enterprise';
+      case ServiceLevel.impactPartner:
+        return 'Impact Partner';
     }
   }
 }

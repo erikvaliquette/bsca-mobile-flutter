@@ -4,8 +4,10 @@ import '../providers/auth_provider.dart';
 import '../providers/message_provider.dart';
 import '../providers/business_connection_provider.dart';
 import '../providers/organization_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../services/notifications/notification_provider.dart';
 import '../widgets/notification_badge.dart';
+import '../widgets/subscription_status_widget.dart';
 import 'profile/profile_screen.dart';
 import 'messaging/chat_list_screen.dart';
 import 'more/more_screen.dart';
@@ -165,6 +167,11 @@ class DashboardScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              
+              const SizedBox(height: 24.0),
+              
+              // Subscription Status
+              const SubscriptionStatusWidget(),
               
               const SizedBox(height: 24.0),
               

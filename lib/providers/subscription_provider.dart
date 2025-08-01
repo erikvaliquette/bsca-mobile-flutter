@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/subscription_model.dart';
 import '../services/subscription_service.dart';
+import '../services/in_app_purchase_service.dart';
+import '../services/subscription_sync_service.dart';
 
 class SubscriptionProvider extends ChangeNotifier {
   SubscriptionModel? _subscription;
@@ -21,16 +23,27 @@ class SubscriptionProvider extends ChangeNotifier {
   Map<String, dynamic> get displayInfo => _subscription?.displayInfo ?? {};
 
   final SubscriptionService _subscriptionService = SubscriptionService.instance;
+  final InAppPurchaseService _inAppPurchaseService = InAppPurchaseService.instance;
+  final SubscriptionSyncService _subscriptionSyncService = SubscriptionSyncService.instance;
 
   SubscriptionProvider() {
-    _initialize();
+    // Constructor is empty as initialization is now done explicitly
   }
 
-  /// Initialize subscription data
-  Future<void> _initialize() async {
+  /// Initialize subscription data and in-app purchases
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    await _initializeInAppPurchases();
     await loadSubscription();
+    
     _isInitialized = true;
     notifyListeners();
+  }
+
+  /// Initialize in-app purchases
+  Future<void> _initializeInAppPurchases() async {
+    await _inAppPurchaseService.initialize();
   }
 
   /// Load current user's subscription
@@ -204,7 +217,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,
@@ -215,7 +228,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,
@@ -226,7 +239,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': true,
         };
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,
@@ -248,18 +261,84 @@ class SubscriptionProvider extends ChangeNotifier {
     _isInitialized = false;
     notifyListeners();
   }
+  
+  /// Purchase a subscription using in-app purchase
+  Future<bool> purchaseSubscription(ServiceLevel serviceLevel) async {
+    if (serviceLevel == ServiceLevel.free) {
+      return true; // Free tier doesn't need purchase
+    }
+    
+    _setLoading(true);
+    _error = null;
+    
+    try {
+      final success = await _inAppPurchaseService.purchaseSubscription(serviceLevel);
+      if (!success) {
+        _error = 'Failed to initiate purchase';
+      }
+      return success;
+    } catch (e) {
+      _error = 'Error purchasing subscription: $e';
+      print('Error purchasing subscription: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Restore previous purchases
+  Future<bool> restorePurchases() async {
+    _setLoading(true);
+    _error = null;
+    
+    try {
+      final success = await _inAppPurchaseService.restorePurchases();
+      if (!success) {
+        _error = 'Failed to restore purchases';
+      }
+      return success;
+    } catch (e) {
+      _error = 'Error restoring purchases: $e';
+      print('Error restoring purchases: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  /// Verify subscription status with platform stores
+  Future<bool> verifySubscriptionStatus() async {
+    _setLoading(true);
+    _error = null;
+    
+    try {
+      final success = await _subscriptionSyncService.verifyAndUpdateSubscriptionStatus();
+      if (success) {
+        await refreshSubscription();
+      } else {
+        _error = 'Failed to verify subscription status';
+      }
+      return success;
+    } catch (e) {
+      _error = 'Error verifying subscription: $e';
+      print('Error verifying subscription: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
 
   /// Get upgrade suggestions based on current tier
   List<ServiceLevel> getUpgradeOptions() {
     final current = currentServiceLevel;
     switch (current) {
       case ServiceLevel.free:
-        return [ServiceLevel.basic, ServiceLevel.advanced, ServiceLevel.premium];
-      case ServiceLevel.basic:
-        return [ServiceLevel.advanced, ServiceLevel.premium];
-      case ServiceLevel.advanced:
-        return [ServiceLevel.premium];
-      case ServiceLevel.premium:
+        return [ServiceLevel.professional, ServiceLevel.enterprise, ServiceLevel.impactPartner];
+      case ServiceLevel.professional:
+        return [ServiceLevel.enterprise, ServiceLevel.impactPartner];
+      case ServiceLevel.enterprise:
+        return [ServiceLevel.impactPartner];
+      case ServiceLevel.impactPartner:
         return []; // Already at highest tier
     }
   }
@@ -294,7 +373,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,
@@ -305,7 +384,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': false,
         };
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,
@@ -316,7 +395,7 @@ class SubscriptionProvider extends ChangeNotifier {
           'api_access': false,
           'priority_support': true,
         };
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return {
           'max_connections': -1,
           'business_trip_attribution': true,

@@ -417,7 +417,7 @@ class SubscriptionBenefitsWidget extends StatelessWidget {
           'Personal carbon tracking',
           'View public content',
         ];
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return [
           'Everything in Free',
           'Unlimited network connections',
@@ -425,18 +425,18 @@ class SubscriptionBenefitsWidget extends StatelessWidget {
           'Basic analytics',
           'Organization membership',
         ];
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return [
-          'Everything in Basic',
-          'Advanced carbon analytics',
-          'Team collaboration features',
+          'Everything in Professional',
+          'Advanced analytics',
+          'Team management',
           'Priority support',
           'Enhanced reporting',
         ];
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return [
-          'Everything in Advanced',
-          'Organization admin capabilities',
+          'Everything in Enterprise',
+          'Admin features',
           'Custom branding',
           'API access',
           'Advanced reporting',
@@ -449,12 +449,12 @@ class SubscriptionBenefitsWidget extends StatelessWidget {
     switch (level) {
       case ServiceLevel.free:
         return Icons.person_outline;
-      case ServiceLevel.basic:
-        return Icons.star_border;
-      case ServiceLevel.advanced:
-        return Icons.star_half;
-      case ServiceLevel.premium:
-        return Icons.star;
+      case ServiceLevel.professional:
+        return Icons.verified_user;
+      case ServiceLevel.enterprise:
+        return Icons.business;
+      case ServiceLevel.impactPartner:
+        return Icons.verified;
     }
   }
 
@@ -462,11 +462,11 @@ class SubscriptionBenefitsWidget extends StatelessWidget {
     switch (level) {
       case ServiceLevel.free:
         return Colors.grey;
-      case ServiceLevel.basic:
+      case ServiceLevel.professional:
         return Colors.blue;
-      case ServiceLevel.advanced:
+      case ServiceLevel.enterprise:
         return Colors.purple;
-      case ServiceLevel.premium:
+      case ServiceLevel.impactPartner:
         return Colors.amber;
     }
   }

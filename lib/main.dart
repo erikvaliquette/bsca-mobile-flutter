@@ -14,6 +14,7 @@ import 'services/notifications/notification_provider.dart';
 import 'services/sdg_icon_service.dart';
 import 'services/supabase/supabase_client.dart';
 import 'services/sync_service.dart';
+import 'services/subscription_initializer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,8 +54,13 @@ void main() async {
   final organizationProvider = OrganizationProvider();
   organizationProvider.setNotificationProvider(notificationProvider);
   
+  // Initialize subscription services
+  final subscriptionInitializer = SubscriptionInitializer();
+  await subscriptionInitializer.initialize();
+  
   // Initialize subscription provider
   final subscriptionProvider = SubscriptionProvider();
+  await subscriptionProvider.initialize();
   
   runApp(
     MultiProvider(
