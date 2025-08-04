@@ -8,6 +8,9 @@ import 'providers/profile_provider.dart';
 import 'providers/business_connection_provider.dart';
 import 'providers/organization_provider.dart';
 import 'providers/subscription_provider.dart';
+import 'providers/action_provider.dart';
+import 'providers/sdg_target_provider.dart';
+import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/notifications/notification_provider.dart';
@@ -62,9 +65,19 @@ void main() async {
   final subscriptionProvider = SubscriptionProvider();
   await subscriptionProvider.initialize();
   
+  // Initialize action provider
+  final actionProvider = ActionProvider();
+  
+  // Initialize SDG target provider
+  final sdgTargetProvider = SdgTargetProvider();
+  // Preload all SDG targets
+  await sdgTargetProvider.loadAllTargets();
+  
   runApp(
     MultiProvider(
       providers: [
+        // We don't need to provide SupabaseService as a provider anymore since we're using the static client
+        // All services now use SupabaseService.client directly
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider.value(value: messageProvider),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
@@ -72,6 +85,8 @@ void main() async {
         ChangeNotifierProvider.value(value: organizationProvider),
         ChangeNotifierProvider.value(value: notificationProvider),
         ChangeNotifierProvider.value(value: subscriptionProvider),
+        ChangeNotifierProvider.value(value: actionProvider),
+        ChangeNotifierProvider.value(value: sdgTargetProvider),
       ],
       child: const BscaApp(),
     ),

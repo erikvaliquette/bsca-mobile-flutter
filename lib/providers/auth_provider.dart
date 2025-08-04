@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -105,26 +106,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('Starting sign-out process');
+      // Use the dedicated AuthService for sign-out operations
+      await AuthService.instance.signOut();
       
-      // First, remove all realtime subscriptions
-      try {
-        debugPrint('Removing all realtime subscriptions');
-        await Supabase.instance.client.removeAllChannels();
-        debugPrint('Successfully removed all realtime subscriptions');
-      } catch (e) {
-        debugPrint('Error removing realtime subscriptions: $e');
-        // Continue with sign-out even if this fails
-      }
-      
-      // Small delay to ensure subscriptions are closed
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Use global sign-out scope to properly clear session
-      debugPrint('Executing sign-out with global scope');
-      await Supabase.instance.client.auth.signOut(scope: SignOutScope.global);
-      
-      // Clear user data
+      // Clear user data after successful sign-out
       _user = null;
       debugPrint('User signed out successfully');
     } catch (e) {

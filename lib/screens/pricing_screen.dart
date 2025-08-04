@@ -104,7 +104,7 @@ class _PricingScreenState extends State<PricingScreen> {
           'FREE',
           'Basic features for individual users',
           [
-            '10 network connections',
+            '100 network connections',
             'Personal carbon tracking',
             'Basic profile',
             'Community access',
@@ -123,7 +123,7 @@ class _PricingScreenState extends State<PricingScreen> {
             'Unlimited connections',
             'Business trip attribution',
             'Organization membership',
-            'Enhanced reporting',
+            'Your SDG Dashboard',
           ],
           currentTier,
         ),
@@ -137,7 +137,7 @@ class _PricingScreenState extends State<PricingScreen> {
           'For organizations and teams',
           [
             'Everything in Professional',
-            'Advanced analytics',
+            'Enterprise SDG Dashboard',
             'Team management',
             'Priority support',
           ],
@@ -290,14 +290,14 @@ class _PricingScreenState extends State<PricingScreen> {
               DataColumn(label: Text('Impact Partner')),
             ],
             rows: [
-              _buildFeatureRow('Connections', '10', 'Unlimited', 'Unlimited', 'Unlimited'),
+              _buildFeatureRow('Connections', '100', 'Unlimited', 'Unlimited', 'Unlimited'),
               _buildFeatureRow('Business Trip Attribution', '❌', '✅', '✅', '✅'),
-              _buildFeatureRow('Advanced Analytics', '❌', '❌', '✅', '✅'),
+              _buildFeatureRow('SDG Dashboard', '❌', '❌', '✅', '✅'),
               _buildFeatureRow('Team Management', '❌', '❌', '✅', '✅'),
               _buildFeatureRow('Organization Admin', '❌', '❌', '❌', '✅'),
               _buildFeatureRow('Custom Branding', '❌', '❌', '❌', '✅'),
               _buildFeatureRow('API Access', '❌', '❌', '❌', '✅'),
-              _buildFeatureRow('Priority Support', '❌', '❌', '✅', '✅'),
+              _buildFeatureRow('Priority Support', '❌', '❌', '❌', '✅'),
             ],
           ),
         ),
@@ -421,7 +421,7 @@ class _PricingScreenState extends State<PricingScreen> {
         title: const Text('Terms & Conditions'),
         content: const SingleChildScrollView(
           child: Text(
-            'By subscribing to BSCA services, you agree to our terms and conditions...\n\n'
+            'By subscribing to SDG Network services, you agree to our terms and conditions...\n\n'
             'Subscriptions will automatically renew unless canceled at least 24 hours before the end of the current period. '
             'You can cancel anytime through your App Store or Google Play account settings.\n\n'
             'For more information, please visit our website.',
@@ -444,7 +444,7 @@ class _PricingScreenState extends State<PricingScreen> {
         title: const Text('Privacy Policy'),
         content: const SingleChildScrollView(
           child: Text(
-            'BSCA is committed to protecting your privacy...\n\n'
+            'SDG Network is committed to protecting your privacy...\n\n'
             'We collect and process subscription information to provide you with access to features '
             'appropriate for your subscription level. Payment information is processed securely by Apple or Google '
             'and is not stored on our servers.\n\n'

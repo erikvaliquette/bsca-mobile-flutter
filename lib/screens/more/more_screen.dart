@@ -5,6 +5,7 @@ import 'package:bsca_mobile_flutter/screens/organization/organization_screen.dar
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
 import 'package:bsca_mobile_flutter/screens/solutions/solutions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/sdg_marketplace/sdg_marketplace_screen.dart';
+import 'package:bsca_mobile_flutter/screens/sdg/sdg_goals_screen.dart';
 import 'package:bsca_mobile_flutter/screens/actions/actions_screen.dart';
 import 'package:bsca_mobile_flutter/screens/travel_emissions/my_travel_emissions_screen.dart';
 
@@ -129,6 +130,14 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const SDGMarketplaceScreen()),
+            ),
+          ),
+          MoreMenuItem(
+            title: 'SDG Goals & Targets',
+            icon: Icons.track_changes,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SdgGoalsScreen()),
             ),
           ),
           MoreMenuItem(

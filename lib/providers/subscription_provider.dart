@@ -208,7 +208,7 @@ class SubscriptionProvider extends ChangeNotifier {
     switch (serviceLevel) {
       case ServiceLevel.free:
         return {
-          'max_connections': 10,
+          'max_connections': 100,
           'business_trip_attribution': false,
           'advanced_analytics': false,
           'team_management': false,
@@ -364,7 +364,7 @@ class SubscriptionProvider extends ChangeNotifier {
     switch (tier) {
       case ServiceLevel.free:
         return {
-          'max_connections': 10,
+          'max_connections': 100,
           'business_trip_attribution': false,
           'advanced_analytics': false,
           'team_management': false,

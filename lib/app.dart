@@ -5,6 +5,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/auth_service.dart';
 import 'screens/pricing_screen.dart';
 import 'screens/subscription_management_screen.dart';
 import 'screens/account_screen.dart';
@@ -17,6 +18,7 @@ class BscaApp extends StatelessWidget {
     return MaterialApp(
       title: 'BSCA Mobile',
       debugShowCheckedModeBanner: false,
+      navigatorKey: AuthService.instance.navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,

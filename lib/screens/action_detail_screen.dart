@@ -1,0 +1,468 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../models/action_item.dart';
+import '../models/action_measurement.dart';
+import '../providers/action_provider.dart';
+import '../services/action_measurement_service.dart';
+import '../widgets/action_measurement_dialog.dart';
+import '../widgets/action_target_dialog.dart';
+import '../widgets/action_progress_chart.dart';
+
+class ActionDetailScreen extends StatefulWidget {
+  final String actionId;
+
+  const ActionDetailScreen({
+    Key? key,
+    required this.actionId,
+  }) : super(key: key);
+
+  @override
+  State<ActionDetailScreen> createState() => _ActionDetailScreenState();
+}
+
+class _ActionDetailScreenState extends State<ActionDetailScreen> {
+  bool _isLoading = true;
+  ActionItem? _action;
+  List<ActionMeasurement> _measurements = [];
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActionData();
+  }
+
+  Future<void> _loadActionData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Get action from provider
+      final actionProvider = Provider.of<ActionProvider>(context, listen: false);
+      final action = actionProvider.getActionById(widget.actionId);
+      
+      if (action == null) {
+        setState(() {
+          _errorMessage = 'Action not found';
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      // Load measurements for this action
+      final measurements = await ActionMeasurementService.getMeasurementsForAction(widget.actionId);
+      
+      setState(() {
+        _action = action;
+        _measurements = measurements;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading action data: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _showBaselineDialog() async {
+    if (_action == null) return;
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => ActionMeasurementDialog(
+        action: _action!,
+        isInitialSetup: true,
+      ),
+    );
+    
+    if (result == true) {
+      await _loadActionData();
+    }
+  }
+
+  Future<void> _showTargetDialog() async {
+    if (_action == null) return;
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => ActionTargetDialog(
+        action: _action!,
+      ),
+    );
+    
+    if (result == true) {
+      await _loadActionData();
+    }
+  }
+
+  Future<void> _showAddMeasurementDialog() async {
+    if (_action == null) return;
+    
+    // Check if baseline is set
+    if (_action!.baselineValue == null || _action!.baselineUnit == null) {
+      final setBaseline = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Baseline Required'),
+          content: const Text(
+            'You need to set a baseline before adding measurements. Would you like to set a baseline now?'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('CANCEL'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('SET BASELINE'),
+            ),
+          ],
+        ),
+      );
+      
+      if (setBaseline == true) {
+        await _showBaselineDialog();
+      }
+      return;
+    }
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => ActionMeasurementDialog(
+        action: _action!,
+        isInitialSetup: false,
+      ),
+    );
+    
+    if (result == true) {
+      await _loadActionData();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_action?.title ?? 'Action Details'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(child: Text(_errorMessage!))
+              : _buildContent(),
+      floatingActionButton: _action != null
+          ? FloatingActionButton(
+              onPressed: _showAddMeasurementDialog,
+              tooltip: 'Add Measurement',
+              child: const Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildContent() {
+    if (_action == null) {
+      return const Center(child: Text('Action not found'));
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Action title and description
+          Text(
+            _action!.title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _action!.description,
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          
+          // Progress indicator
+          LinearProgressIndicator(
+            value: _action!.progress,
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              _action!.progress >= 1.0 ? Colors.green : Theme.of(context).primaryColor,
+            ),
+            minHeight: 10,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${(_action!.progress * 100).toStringAsFixed(1)}% complete',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Baseline and target section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Sustainability Tracking',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'baseline') {
+                            _showBaselineDialog();
+                          } else if (value == 'target') {
+                            _showTargetDialog();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'baseline',
+                            child: Text('Set Baseline'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'target',
+                            child: Text('Set Target'),
+                          ),
+                        ],
+                        icon: const Icon(Icons.more_vert),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Baseline info
+                  _buildInfoRow(
+                    'Baseline',
+                    _action!.baselineValue != null
+                        ? '${_action!.baselineValue} ${_action!.baselineUnit ?? ''}'
+                        : 'Not set',
+                    _action!.baselineDate != null
+                        ? DateFormat('yyyy-MM-dd').format(_action!.baselineDate!)
+                        : null,
+                    Icons.flag,
+                    Colors.blue,
+                  ),
+                  if (_action!.baselineMethodology != null && _action!.baselineMethodology!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 40, top: 4),
+                      child: Text(
+                        'Methodology: ${_action!.baselineMethodology}',
+                        style: const TextStyle(
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  
+                  // Target info
+                  _buildInfoRow(
+                    'Target',
+                    _action!.targetValue != null
+                        ? '${_action!.targetValue} ${_action!.baselineUnit ?? ''}'
+                        : 'Not set',
+                    _action!.targetDate != null
+                        ? DateFormat('yyyy-MM-dd').format(_action!.targetDate!)
+                        : null,
+                    Icons.flag,
+                    Colors.green,
+                  ),
+                  if (_action!.verificationMethod != null && _action!.verificationMethod!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 40, top: 4),
+                      child: Text(
+                        'Verification: ${_action!.verificationMethod}',
+                        style: const TextStyle(
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Progress chart
+          if (_measurements.isNotEmpty || _action!.baselineValue != null)
+            Card(
+              child: ActionProgressChart(
+                action: _action!,
+                measurements: _measurements,
+              ),
+            ),
+          
+          // Measurements list
+          const SizedBox(height: 24),
+          _buildMeasurementsSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, String? date, IconData icon, Color color) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(value),
+              if (date != null)
+                Text(
+                  'Date: $date',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showEvidenceImage(String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: const Text('Evidence Image'),
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            Flexible(
+              child: Image.network(
+                url,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return const Center(
+                    child: Text(
+                      'Failed to load image',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMeasurementsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Measurements',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        
+        if (_measurements.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'No measurements recorded yet. Tap the + button to add your first measurement.',
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _measurements.length,
+            itemBuilder: (context, index) {
+              final measurement = _measurements[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    child: Text('${index + 1}'),
+                  ),
+                  title: Text(
+                    '${measurement.value} ${measurement.unit ?? _action?.baselineUnit ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(DateFormat('yyyy-MM-dd').format(measurement.date)),
+                      if (measurement.notes != null && measurement.notes!.isNotEmpty)
+                        Text(
+                          measurement.notes!,
+                          style: const TextStyle(fontStyle: FontStyle.italic),
+                        ),
+                    ],
+                  ),
+                  trailing: measurement.evidenceUrl != null
+                      ? IconButton(
+                          icon: const Icon(Icons.image),
+                          onPressed: () {
+                            _showEvidenceImage(measurement.evidenceUrl!);
+                          },
+                        )
+                      : null,
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}

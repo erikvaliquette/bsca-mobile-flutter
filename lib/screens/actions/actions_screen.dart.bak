@@ -708,7 +708,6 @@ class _ActionsScreenState extends State<ActionsScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: [
-                      'personal',
                       'energy',
                       'water',
                       'waste',
@@ -1251,73 +1250,56 @@ class _ActionsScreenState extends State<ActionsScreen> {
             color: action.isCompleted ? Colors.grey : Colors.black,
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        subtitle: Row(
           children: [
-            // First row with category
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.category, size: 14, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  _formatCategoryName(action.category),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
+            // Category
+            Icon(Icons.category, size: 14, color: Colors.grey[600]),
+            const SizedBox(width: 4),
+            Text(
+              _formatCategoryName(action.category),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
             
-            // Second row with priority and tracking
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8, // horizontal space between items
-              runSpacing: 4, // vertical space between lines
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                // Priority indicator
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _getPriorityColor(action.priority).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _getPriorityColor(action.priority),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    action.priority.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: _getPriorityColor(action.priority),
-                    ),
-                  ),
+            // Priority indicator
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _getPriorityColor(action.priority).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _getPriorityColor(action.priority),
+                  width: 1,
                 ),
-                
-                // Tracking indicator
-                if (action.baselineValue != null || action.targetValue != null || 
-                    (action.measurements != null && action.measurements!.isNotEmpty)) 
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.analytics, size: 14, color: Colors.purple[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Tracking',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.purple[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
+              ),
+              child: Text(
+                action.priority.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: _getPriorityColor(action.priority),
+                ),
+              ),
             ),
+            
+            // Tracking indicator
+            if (action.baselineValue != null || action.targetValue != null || 
+                (action.measurements != null && action.measurements!.isNotEmpty)) ...[  
+              const SizedBox(width: 12),
+              Icon(Icons.analytics, size: 14, color: Colors.purple[600]),
+              const SizedBox(width: 4),
+              Text(
+                'Tracking',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.purple[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
         ),
         trailing: Row(
@@ -1637,9 +1619,11 @@ class _ActionsScreenState extends State<ActionsScreen> {
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 }
+// Progress Update Dialog
 class _ProgressUpdateDialog extends StatefulWidget {
   final double currentProgress;
 

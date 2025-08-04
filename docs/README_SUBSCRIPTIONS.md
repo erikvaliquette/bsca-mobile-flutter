@@ -98,13 +98,15 @@ LimitedListWidget<Connection>(
   items: connections,
   featureDescription: 'network connections',
   tierLimits: {
-    ServiceLevel.free: 10,
-    ServiceLevel.professional: 50,
-    ServiceLevel.enterprise: 100,
-    ServiceLevel.impactPartner: 500,
+    ServiceLevel.free: 100,
+    ServiceLevel.professional: null,
+    ServiceLevel.enterprise: null,
+    ServiceLevel.impactPartner: null,
   },
   itemBuilder: (context, connection) => ConnectionListItem(connection: connection),
 )
+
+
 ```
 
 ### Showing Upgrade Prompt

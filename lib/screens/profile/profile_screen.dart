@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/profile_provider.dart';
+import '../../services/auth_service.dart';
 import '../../models/profile_model.dart';
 import '../../widgets/sdg_icon_widget.dart';
 import '../../widgets/validation_status_widget.dart';
@@ -601,20 +602,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmSignOut(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Sign Out'),
           content: const Text('Are you sure you want to sign out?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () async {
-                Navigator.of(context).pop();
+                // Close confirmation dialog
+                Navigator.of(dialogContext).pop();
                 
-                // Show loading indicator
+                // Show loading dialog
                 showDialog(
                   context: context,
                   barrierDismissible: false,
@@ -631,45 +633,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   },
                 );
-                
+
                 try {
-                  // Get the navigator before sign out to ensure we can navigate after auth state changes
-                  final navigator = Navigator.of(context, rootNavigator: true);
+                  // Set up a timeout for sign-out process
+                  bool signOutComplete = false;
                   
-                  // Sign out with a timeout to prevent hanging
-                  await Future.delayed(const Duration(seconds: 1));
-                  await Provider.of<AuthProvider>(context, listen: false).signOut();
+                  // Start a timeout that will force navigation if sign-out takes too long
+                  Future.delayed(const Duration(seconds: 5), () {
+                    if (!signOutComplete) {
+                      debugPrint('Sign out timed out, forcing navigation');
+                      // Use AuthService for reliable navigation regardless of context
+                      AuthService.instance.navigateToLogin();
+                    }
+                  });
+
+                  // Perform the actual sign-out
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  await authProvider.signOut();
+                  signOutComplete = true;
                   
-                  // Force navigation to login screen regardless of auth state changes
-                  if (mounted) {
-                    // Close loading dialog first
-                    navigator.pop();
-                    
-                    // Force navigation to login screen
-                    navigator.pushNamedAndRemoveUntil('/login', (route) => false);
-                  }
+                  // Use AuthService for reliable navigation
+                  AuthService.instance.navigateToLogin();
                 } catch (e) {
                   debugPrint('Error during sign out: $e');
-                  if (mounted) {
-                    // Close loading dialog
-                    Navigator.of(context, rootNavigator: true).pop();
-                    
-                    // Show error message
+                  
+                  // Show error using a post-frame callback to ensure we're in a safe context
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error signing out: $e'),
-                        backgroundColor: Colors.red,
-                      ),
+                      SnackBar(content: Text('Sign out failed: ${e.toString()}'))
                     );
-                    
-                    // Force navigation to login screen anyway
-                    Future.delayed(const Duration(seconds: 2), () {
-                      if (mounted) {
-                        Navigator.of(context, rootNavigator: true)
-                            .pushNamedAndRemoveUntil('/login', (route) => false);
-                      }
-                    });
-                  }
+                  });
+                  
+                  // Force navigation to login screen anyway after a short delay
+                  Future.delayed(const Duration(seconds: 2), () {
+                    AuthService.instance.navigateToLogin();
+                  });
                 }
               },
               child: const Text('Sign Out'),
