@@ -18,6 +18,7 @@ import 'package:bsca_mobile_flutter/widgets/functional_add_action_dialog.dart';
 import 'package:bsca_mobile_flutter/widgets/basic_add_action_dialog.dart';
 import 'package:bsca_mobile_flutter/services/sdg_icon_service.dart';
 import 'package:bsca_mobile_flutter/screens/actions/add_action_screen.dart';
+import 'package:bsca_mobile_flutter/screens/sdg/sdg_targets_screen.dart';
 import 'package:bsca_mobile_flutter/screens/action_detail_screen.dart';
 
 class ActionsScreen extends StatefulWidget {
@@ -296,41 +297,6 @@ class _ActionsScreenState extends State<ActionsScreen> {
                   ),
                 ),
               ),
-              
-              const SizedBox(height: 24.0),
-              
-              // All SDGs Section
-              Card(
-                elevation: 2.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sustainable Development Goals',
-                        style: TextStyle(
-                          fontSize: 22.0,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      const Text(
-                        'Select a Sustainable Development Goal to track your progress and impact.',
-                        style: TextStyle(
-                          fontSize: 16.0,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-                      _buildAllSDGsList(),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -341,77 +307,7 @@ class _ActionsScreenState extends State<ActionsScreen> {
     }
   }
 
-  Widget _buildAllSDGsList() {
-    print('Building all SDGs list');
-    try {
-      return ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: SDGGoal.allGoals.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          try {
-            final sdg = SDGGoal.allGoals[index];
-            final bool isSelected = _userSDGs.contains(sdg.id);
-            
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-              leading: SDGIconWidget(
-                sdgNumber: sdg.id,
-                size: 50.0,
-                showLabel: false,
-              ),
-              title: Text(
-                'SDG ${sdg.id}: ${sdg.name}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: Text(
-                _getSDGDescription(sdg.id),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: SizedBox(
-                width: 80, // Fixed width to prevent layout issues
-                child: ElevatedButton(
-                  onPressed: () {
-                    print('View button pressed for SDG ${sdg.id}');
-                    setState(() {
-                      _selectedSDG = sdg.id;
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Theme.of(context).primaryColor,
-                    side: BorderSide(color: Theme.of(context).primaryColor),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: const Text('View'),
-                ),
-              ),
-              onTap: () {
-                print('List tile tapped for SDG ${sdg.id}');
-                setState(() {
-                  _selectedSDG = sdg.id;
-                });
-              },
-            );
-          } catch (e) {
-            print('Error building SDG list item at index $index: $e');
-            return const ListTile(
-              title: Text('Error loading SDG'),
-            );
-          }
-        },
-      );
-    } catch (e) {
-      print('Error building all SDGs list: $e');
-      return const Center(
-        child: Text('Error loading SDGs list'),
-      );
-    }
-  }
+  // _buildAllSDGsList method removed as it's no longer needed
 
   // Simple fallback UI for when the complex UI fails
   Widget _buildSimpleSDGList() {
@@ -435,9 +331,13 @@ class _ActionsScreenState extends State<ActionsScreen> {
               final sdg = SDGGoal.getById(sdgId);
               return InkWell(
                 onTap: () {
-                  setState(() {
-                    _selectedSDG = sdgId;
-                  });
+                  // Navigate to SDG Targets screen instead of just setting state
+                  final sdg = SDGGoal.getById(sdgId);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => SdgTargetsScreen(sdg: sdg),
+                    ),
+                  );
                 },
                 child: Chip(
                   avatar: SizedBox(
@@ -824,7 +724,7 @@ class _ActionsScreenState extends State<ActionsScreen> {
                           return DropdownMenuItem<SdgTarget>(
                             value: target,
                             child: Text(
-                              target.name,
+                              target.description,
                               overflow: TextOverflow.ellipsis,
                             ),
                           );
@@ -1410,7 +1310,7 @@ class _ActionsScreenState extends State<ActionsScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'SDG Target: ${action.sdgTarget!.name}',
+                          'SDG Target: ${action.sdgTarget!.description}',
                           style: TextStyle(
                             color: Colors.green[600],
                             fontWeight: FontWeight.w500,

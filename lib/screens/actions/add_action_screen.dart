@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:bsca_mobile_flutter/models/sdg_target.dart';
 
 class AddActionScreen extends StatelessWidget {
   final int sdgId;
+  final SdgTarget? target; // Optional target parameter
 
   const AddActionScreen({
     Key? key,
     required this.sdgId,
+    this.target, // Make it optional
   }) : super(key: key);
 
   @override
@@ -41,6 +44,12 @@ class AddActionScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text('SDG ID: $sdgId'),
+              if (target != null) ...[  
+                const SizedBox(height: 10),
+                Text('Target: ${target!.targetNumber} - ${target!.description}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(true),

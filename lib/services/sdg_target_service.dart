@@ -14,7 +14,7 @@ class SdgTargetService {
       final response = await SupabaseService.client
           .from(_tableName)
           .select()
-          .order('name');
+          .order('target_number');
 
       return (response as List)
           .map((data) => SdgTarget.fromJson(data))
@@ -31,7 +31,7 @@ class SdgTargetService {
           .from(_tableName)
           .select()
           .eq('organization_id', organizationId)
-          .order('name');
+          .order('target_number');
 
       return (response as List)
           .map((data) => SdgTarget.fromJson(data))
@@ -48,7 +48,7 @@ class SdgTargetService {
           .from(_tableName)
           .select()
           .eq('user_id', userId)
-          .order('name');
+          .order('target_number');
 
       return (response as List)
           .map((data) => SdgTarget.fromJson(data))
@@ -61,10 +61,11 @@ class SdgTargetService {
   
   Future<List<SdgTarget>> getTargetsBySDG(int sdgId) async {
     try {
+      // Using 'sdg_id' instead of 'sdg_goal_number' to match the database schema
       final response = await SupabaseService.client
           .from(_tableName)
           .select()
-          .eq('sdg_goal_number', sdgId)
+          .eq('sdg_id', sdgId)
           .order('target_number', ascending: true);
 
       return (response as List)

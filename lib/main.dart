@@ -10,6 +10,7 @@ import 'providers/organization_provider.dart';
 import 'providers/subscription_provider.dart';
 import 'providers/action_provider.dart';
 import 'providers/sdg_target_provider.dart';
+import 'providers/user_sdg_provider.dart';
 import 'services/auth_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
@@ -73,6 +74,9 @@ void main() async {
   // Preload all SDG targets
   await sdgTargetProvider.loadAllTargets();
   
+  // Initialize user SDG provider
+  final userSdgProvider = UserSdgProvider();
+  
   runApp(
     MultiProvider(
       providers: [
@@ -87,6 +91,7 @@ void main() async {
         ChangeNotifierProvider.value(value: subscriptionProvider),
         ChangeNotifierProvider.value(value: actionProvider),
         ChangeNotifierProvider.value(value: sdgTargetProvider),
+        ChangeNotifierProvider.value(value: userSdgProvider),
       ],
       child: const BscaApp(),
     ),

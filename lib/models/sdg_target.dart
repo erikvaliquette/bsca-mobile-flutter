@@ -1,9 +1,10 @@
 class SdgTarget {
   final String id;
-  final String name;
-  final String? description;
-  final int? sdgGoalNumber;
-  final String? targetNumber;
+  final String description;
+  final String? actionDescription; // Matches action_description in the database
+  final int? sdgGoalNumber; // Keeping for backward compatibility
+  final int? sdgId; // Added to match database schema
+  final int? targetNumber;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? organizationId;
@@ -11,9 +12,10 @@ class SdgTarget {
 
   SdgTarget({
     required this.id,
-    required this.name,
-    this.description,
+    required this.description,
+    this.actionDescription,
     this.sdgGoalNumber,
+    this.sdgId,
     this.targetNumber,
     this.createdAt,
     this.updatedAt,
@@ -24,10 +26,11 @@ class SdgTarget {
   factory SdgTarget.fromJson(Map<String, dynamic> json) {
     return SdgTarget(
       id: json['id'],
-      name: json['name'],
       description: json['description'],
+      actionDescription: json['action_description'],
       sdgGoalNumber: json['sdg_goal_number'],
-      targetNumber: json['target_number'],
+      sdgId: json['sdg_id'], // Added to match database schema
+      targetNumber: json['target_number'] is String ? int.tryParse(json['target_number']) : json['target_number'],
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       organizationId: json['organization_id'],
@@ -36,23 +39,30 @@ class SdgTarget {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      if (description != null) 'description': description,
-      if (sdgGoalNumber != null) 'sdg_goal_number': sdgGoalNumber,
+    final json = <String, dynamic>{
+      'description': description,
+      if (actionDescription != null) 'action_description': actionDescription,
+      if (sdgId != null) 'sdg_id': sdgId, // Using sdg_id for database operations
       if (targetNumber != null) 'target_number': targetNumber,
-      if (organizationId != null) 'organization_id': organizationId,
+      if (organizationId != null && organizationId!.isNotEmpty) 'organization_id': organizationId,
       if (userId != null) 'user_id': userId,
     };
+    
+    // Only include ID if it's not empty (for updates, not for inserts)
+    if (id.isNotEmpty) {
+      json['id'] = id;
+    }
+    
+    return json;
   }
 
   SdgTarget copyWith({
     String? id,
-    String? name,
     String? description,
+    String? actionDescription,
     int? sdgGoalNumber,
-    String? targetNumber,
+    int? sdgId,
+    int? targetNumber,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? organizationId,
@@ -60,9 +70,10 @@ class SdgTarget {
   }) {
     return SdgTarget(
       id: id ?? this.id,
-      name: name ?? this.name,
       description: description ?? this.description,
+      actionDescription: actionDescription ?? this.actionDescription,
       sdgGoalNumber: sdgGoalNumber ?? this.sdgGoalNumber,
+      sdgId: sdgId ?? this.sdgId,
       targetNumber: targetNumber ?? this.targetNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

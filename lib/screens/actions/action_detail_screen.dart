@@ -385,7 +385,7 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_action.sdgTarget!.name)),
+                  Expanded(child: Text(_action.sdgTarget!.description)),
                 ],
               ),
             ],
@@ -590,7 +590,7 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            _action.sdgTarget!.name,
+                            _action.sdgTarget!.description,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
