@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bsca_mobile_flutter/models/sdg_goal.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target.dart';
+import 'package:bsca_mobile_flutter/models/action_item.dart';
+import 'package:bsca_mobile_flutter/models/action_activity.dart';
 import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
+import 'package:bsca_mobile_flutter/providers/action_provider.dart';
+import 'package:bsca_mobile_flutter/services/action_activity_service.dart';
 
 import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
+import 'package:bsca_mobile_flutter/widgets/add_activity_dialog.dart';
 import 'package:bsca_mobile_flutter/screens/actions/add_action_screen.dart';
+import 'package:bsca_mobile_flutter/screens/action_detail_screen.dart';
 
 class SdgTargetsScreen extends StatefulWidget {
   final SDGGoal sdg;
@@ -35,10 +41,22 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
     
     try {
       final sdgTargetProvider = Provider.of<SdgTargetProvider>(context, listen: false);
-      await sdgTargetProvider.loadTargetsForSDG(widget.sdg.id);
+      final actionProvider = Provider.of<ActionProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      final userId = authProvider.user?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      // Load targets and actions in parallel
+      await Future.wait([
+        sdgTargetProvider.loadTargetsForSDG(widget.sdg.id),
+        actionProvider.loadUserActions(userId),
+      ]);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading targets: $e')),
+        SnackBar(content: Text('Error loading data: $e')),
       );
     } finally {
       if (mounted) {
@@ -295,73 +313,478 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
   }
   
   Widget _buildTargetCard(SdgTarget target) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Consumer<ActionProvider>(
+      builder: (context, actionProvider, child) {
+        // Get actions for this target
+        final targetActions = actionProvider.actions
+            .where((action) => action.sdgTargetId == target.id)
+            .toList();
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          elevation: 2,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: false,
+              tilePadding: const EdgeInsets.all(16),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).primaryColor,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Target ${target.targetNumber}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      target.description,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                  if (targetActions.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${targetActions.length} action${targetActions.length != 1 ? 's' : ''}',
+                        style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              subtitle: target.actionDescription != null && target.actionDescription!.isNotEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        target.actionDescription!,
+                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    )
+                  : null,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'Target ${target.targetNumber}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+                // Target Management Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _navigateToAddAction(target),
+                      icon: const Icon(Icons.add_task, size: 18),
+                      label: const Text('Add Action'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _showEditTargetDialog(target),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Edit'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _confirmDeleteTarget(target),
+                      icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    target.description,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                const SizedBox(height: 16),
+                
+                // Actions Section
+                if (targetActions.isNotEmpty) ...[
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.play_arrow,
+                        color: Colors.blue[700],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Actions (Strategic Level)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.blue[700],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  ...targetActions.map((action) => _buildActionCard(action)),
+                ] else ...[
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No actions yet for this target',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create your first strategic action to work towards this SDG target',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
-            if (target.description != null && target.description!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                target.description!,
-                style: const TextStyle(fontSize: 14),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionCard(ActionItem action) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.blue.withValues(alpha: 0.05),
+      ),
+      child: FutureBuilder<List<ActionActivity>>(
+        future: ActionActivityService.getActivitiesForAction(action.id),
+        builder: (context, snapshot) {
+          final activities = snapshot.data ?? [];
+          
+          return Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: false,
+              tilePadding: const EdgeInsets.all(12),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[100],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'ACTION',
+                      style: TextStyle(
+                        color: Colors.blue[800],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      action.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  if (activities.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${activities.length} activit${activities.length != 1 ? 'ies' : 'y'}',
+                        style: TextStyle(
+                          color: Colors.orange[700],
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              subtitle: action.description.isNotEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        action.description,
+                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  : null,
               children: [
-                TextButton.icon(
-                  onPressed: () => _navigateToAddAction(target),
-                  icon: const Icon(Icons.add_task),
-                  label: const Text('Add Action'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.green,
+                // Action Management Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _navigateToActionDetail(action),
+                      icon: const Icon(Icons.visibility, size: 16),
+                      label: const Text('View Details'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _addActivityToAction(action),
+                      icon: const Icon(Icons.add_circle_outline, size: 16),
+                      label: const Text('Add Activity'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                
+                // Activities Section
+                if (activities.isNotEmpty) ...[
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.task_alt,
+                        color: Colors.orange[700],
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Activities (Tactical Level)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Colors.orange[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...activities.map((activity) => _buildActivityCard(activity)),
+                ] else ...[
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.assignment_outlined,
+                          size: 32,
+                          color: Colors.orange[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No activities yet',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Add tactical activities to execute this action',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildActivityCard(ActionActivity activity) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(activity.status).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  activity.status.toUpperCase(),
+                  style: TextStyle(
+                    color: _getStatusColor(activity.status),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 9,
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => _showEditTargetDialog(target),
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Edit'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  activity.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => _confirmDeleteTarget(target),
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  label: const Text('Delete', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+          if (activity.description.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              activity.description,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (activity.impactValue != null && activity.impactUnit != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                  Icons.trending_up,
+                  size: 14,
+                  color: Colors.green[600],
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Impact: ${activity.impactValue} ${activity.impactUnit}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green[600],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
           ],
-        ),
+        ],
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.orange;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  void _navigateToActionDetail(ActionItem action) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ActionDetailScreen(actionId: action.id),
+      ),
+    );
+  }
+
+  Future<void> _addActivityToAction(ActionItem action) async {
+    // Show the add activity dialog directly
+    final result = await showDialog<ActionActivity?>(
+      context: context,
+      builder: (context) => AddActivityDialog(
+        actionId: action.id,
+        organizationId: action.organizationId,
+      ),
+    );
+    
+    if (result != null) {
+      // Refresh the actions to show the new activity count
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final actionProvider = Provider.of<ActionProvider>(context, listen: false);
+      final userId = authProvider.user?.id;
+      if (userId != null) {
+        await actionProvider.loadUserActions(userId);
+      }
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Activity created successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
   
   Future<void> _showAddTargetDialog() async {
@@ -539,14 +962,18 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
           builder: (context, setState) {
             return AlertDialog(
               title: Text('Edit Target ${target.targetNumber}'),
-              contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              content: SizedBox(
-                width: 280, // Reduced width to prevent overflow
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              contentPadding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                ),
+                child: IntrinsicWidth(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       // Target Number
                       TextField(
                         controller: targetNumberController,
@@ -609,8 +1036,9 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
                             });
                           },
                         ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

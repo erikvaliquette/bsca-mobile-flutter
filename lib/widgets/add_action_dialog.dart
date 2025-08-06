@@ -23,19 +23,17 @@ class _AddActionDialogState extends State<AddActionDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   
-  String _selectedCategory = 'personal';
+  String _selectedCategory = 'reduction';
   String _selectedPriority = 'medium';
   DateTime? _dueDate;
   Organization? _selectedOrganization;
   bool _isLoading = false;
 
   final List<String> _categories = [
-    'personal',
-    'community',
-    'workplace',
+    'reduction',
+    'innovation',
     'education',
-    'advocacy',
-    'lifestyle',
+    'policy',
   ];
 
   final List<String> _priorities = [
@@ -57,11 +55,14 @@ class _AddActionDialogState extends State<AddActionDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16.0),
       ),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 500),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.95,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(20.0),
             child: Form(
               key: _formKey,
               child: Column(

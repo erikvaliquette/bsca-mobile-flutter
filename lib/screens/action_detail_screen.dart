@@ -6,6 +6,7 @@ import '../models/action_measurement.dart';
 import '../models/action_activity.dart';
 import '../providers/action_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/action_service.dart';
 import '../services/action_measurement_service.dart';
 import '../services/action_activity_service.dart';
 import '../widgets/action_measurement_dialog.dart';
@@ -40,27 +41,40 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
   }
 
   Future<void> _loadActionData() async {
+    print('ActionDetailScreen: Starting to load action data for ID: ${widget.actionId}');
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      // Get action from provider
-      final actionProvider = Provider.of<ActionProvider>(context, listen: false);
-      final action = actionProvider.getActionById(widget.actionId);
+      print('ActionDetailScreen: Fetching action from database...');
+      // Fetch action directly from database
+      final action = await ActionService.getActionById(widget.actionId);
+      
+      print('ActionDetailScreen: Action fetched: ${action?.title ?? 'null'}');
       
       if (action == null) {
+        print('ActionDetailScreen: Action not found in database');
         setState(() {
-          _errorMessage = 'Action not found';
+          _errorMessage = 'Action not found in database';
           _isLoading = false;
         });
         return;
       }
       
-      // Load measurements and activities for this action
-      final measurements = await ActionMeasurementService.getMeasurementsForAction(widget.actionId);
-      final activities = await ActionActivityService.getActivitiesForAction(widget.actionId);
+      print('ActionDetailScreen: Loading measurements and activities...');
+      // Load measurements and activities for this action in parallel
+      final results = await Future.wait([
+        ActionMeasurementService.getMeasurementsForAction(widget.actionId),
+        ActionActivityService.getActivitiesForAction(widget.actionId),
+      ]);
+      
+      final measurements = results[0] as List<ActionMeasurement>;
+      final activities = results[1] as List<ActionActivity>;
+      
+      print('ActionDetailScreen: Loaded ${measurements.length} measurements and ${activities.length} activities');
       
       setState(() {
         _action = action;
@@ -68,7 +82,10 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         _activities = activities;
         _isLoading = false;
       });
+      
+      print('ActionDetailScreen: Data loading completed successfully');
     } catch (e) {
+      print('ActionDetailScreen: Error loading action data: $e');
       setState(() {
         _errorMessage = 'Error loading action data: $e';
         _isLoading = false;
@@ -265,15 +282,71 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Debug logging
+    print('ActionDetailScreen build: _isLoading=$_isLoading, _errorMessage=$_errorMessage, _action=${_action?.title}');
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(_action?.title ?? 'Action Details'),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading action details...'),
+                ],
+              ),
+            )
           : _errorMessage != null
-              ? Center(child: Text(_errorMessage!))
-              : _buildContent(),
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      SizedBox(height: 16),
+                      Text(
+                        'Error Loading Action',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 8),
+                      Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: _loadActionData,
+                        child: Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _action == null
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'Action Not Found',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'The requested action could not be found.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _buildContent(),
       floatingActionButton: _action != null
           ? FloatingActionButton(
               onPressed: _showAddMeasurementDialog,
@@ -285,195 +358,429 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
   }
 
   Widget _buildContent() {
+    print('ActionDetailScreen: _buildContent called, action: ${_action?.title}');
+    
     if (_action == null) {
+      print('ActionDetailScreen: _buildContent - action is null');
       return const Center(child: Text('Action not found'));
     }
 
-    return SingleChildScrollView(
+    print('ActionDetailScreen: _buildContent - building content for: ${_action!.title}');
+    print('ActionDetailScreen: About to return widget tree');
+    
+    // STEP 3: Add Activities section (safe widgets only)
+    return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Action title and description
+          // Action title
           Text(
             _action!.title,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
+              color: Colors.blue,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            _action!.description,
-            style: const TextStyle(fontSize: 16),
+          // Edit button (separate line)
+          ElevatedButton(
+            onPressed: () => _showEditActionDialog(),
+            child: const Text('Edit Action'),
           ),
           const SizedBox(height: 16),
-          
-          // Progress indicator
-          LinearProgressIndicator(
-            value: _action!.progress,
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(
-              _action!.progress >= 1.0 ? Colors.green : Theme.of(context).primaryColor,
-            ),
-            minHeight: 10,
-          ),
-          const SizedBox(height: 4),
           Text(
-            '${(_action!.progress * 100).toStringAsFixed(1)}% complete',
+            _action!.description,
             style: const TextStyle(
+              fontSize: 16,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Progress: ${(_action!.progress * 100).toStringAsFixed(1)}%',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Activities section header
+          Text(
+            'Activities (${_activities.length})',
+            style: const TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: Colors.green,
             ),
           ),
-          const SizedBox(height: 24),
-          
-          // Baseline and target section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Sustainability Tracking',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'baseline') {
-                            _showBaselineDialog();
-                          } else if (value == 'target') {
-                            _showTargetDialog();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'baseline',
-                            child: Text('Set Baseline'),
-                          ),
-                          const PopupMenuItem(
-                            value: 'target',
-                            child: Text('Set Target'),
-                          ),
-                        ],
-                        icon: const Icon(Icons.more_vert),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Baseline info
-                  _buildInfoRow(
-                    'Baseline',
-                    _action!.baselineValue != null
-                        ? '${_action!.baselineValue} ${_action!.baselineUnit ?? ''}'
-                        : 'Not set',
-                    _action!.baselineDate != null
-                        ? DateFormat('yyyy-MM-dd').format(_action!.baselineDate!)
-                        : null,
-                    Icons.flag,
-                    Colors.blue,
-                  ),
-                  if (_action!.baselineMethodology != null && _action!.baselineMethodology!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 40, top: 4),
-                      child: Text(
-                        'Methodology: ${_action!.baselineMethodology}',
-                        style: const TextStyle(
-                          fontStyle: FontStyle.italic,
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  
-                  // Target info
-                  _buildInfoRow(
-                    'Target',
-                    _action!.targetValue != null
-                        ? '${_action!.targetValue} ${_action!.baselineUnit ?? ''}'
-                        : 'Not set',
-                    _action!.targetDate != null
-                        ? DateFormat('yyyy-MM-dd').format(_action!.targetDate!)
-                        : null,
-                    Icons.flag,
-                    Colors.green,
-                  ),
-                  if (_action!.verificationMethod != null && _action!.verificationMethod!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 40, top: 4),
-                      child: Text(
-                        'Verification: ${_action!.verificationMethod}',
-                        style: const TextStyle(
-                          fontStyle: FontStyle.italic,
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                ],
+          const SizedBox(height: 8),
+          // Add Activity button
+          ElevatedButton(
+            onPressed: () => _showAddActivityDialog(),
+            child: const Text('Add Activity'),
+          ),
+          const SizedBox(height: 16),
+          // Activities list (simple approach)
+          ..._activities.map((activity) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${activity.isCompleted ? '✅' : '⏳'} ${activity.title}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Activity buttons (separate lines to avoid Row issues)
+              ElevatedButton(
+                onPressed: () => _showActivityDetailsDialog(activity),
+                child: const Text('View Details'),
+              ),
+              const SizedBox(height: 4),
+              ElevatedButton(
+                onPressed: () => _showEditActivityDialog(activity),
+                child: const Text('Edit Activity'),
+              ),
+              const SizedBox(height: 16),
+            ],
+          )).toList(),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildSimpleInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          
-          // Progress chart
-          if (_measurements.isNotEmpty || _action!.baselineValue != null)
-            Card(
-              child: ActionProgressChart(
-                action: _action!,
-                measurements: _measurements,
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
               ),
             ),
-          
-          // Activities section
-          const SizedBox(height: 24),
-          _buildActivitiesSection(),
-          
-          // Measurements list
-          const SizedBox(height: 24),
-          _buildMeasurementsSection(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, String? date, IconData icon, Color color) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color),
-        const SizedBox(width: 8),
-        Expanded(
+  String _getCategoryValue(String category) {
+    const validCategories = [
+      'personal', 'community', 'workplace', 'education', 
+      'innovation', 'environmental', 'social', 'other'
+    ];
+    return validCategories.contains(category) ? category : 'other';
+  }
+
+  String _getPriorityValue(String priority) {
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    return validPriorities.contains(priority) ? priority : 'medium';
+  }
+
+  void _showEditActionDialog() {
+    final titleController = TextEditingController(text: _action!.title);
+    final descriptionController = TextEditingController(text: _action!.description);
+    String category = _action!.category;
+    String priority = _action!.priority;
+    DateTime? dueDate = _action!.dueDate;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Action'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              // Title field
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Action Title',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              // Description field
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              // Category dropdown
+              DropdownButtonFormField<String>(
+                value: _getCategoryValue(category),
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'personal', child: Text('Personal')),
+                  DropdownMenuItem(value: 'community', child: Text('Community')),
+                  DropdownMenuItem(value: 'workplace', child: Text('Workplace')),
+                  DropdownMenuItem(value: 'education', child: Text('Education')),
+                  DropdownMenuItem(value: 'innovation', child: Text('Innovation')),
+                  DropdownMenuItem(value: 'environmental', child: Text('Environmental')),
+                  DropdownMenuItem(value: 'social', child: Text('Social')),
+                  DropdownMenuItem(value: 'other', child: Text('Other')),
+                ],
+                onChanged: (value) {
+                  if (value != null) category = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              // Priority dropdown
+              DropdownButtonFormField<String>(
+                value: _getPriorityValue(priority),
+                decoration: const InputDecoration(
+                  labelText: 'Priority',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'low', child: Text('Low')),
+                  DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                  DropdownMenuItem(value: 'high', child: Text('High')),
+                  DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
+                ],
+                onChanged: (value) {
+                  if (value != null) priority = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              // Due date picker
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Due Date',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    dueDate != null 
+                        ? 'Due: ${DateFormat('yyyy-MM-dd').format(dueDate!)}'
+                        : 'No due date set',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: dueDate ?? DateTime.now().add(const Duration(days: 7)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            dueDate = picked;
+                          }
+                        },
+                        child: Text(dueDate != null ? 'Change Date' : 'Set Date'),
+                      ),
+                      if (dueDate != null)
+                        ElevatedButton(
+                          onPressed: () {
+                            dueDate = null;
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
+                          child: const Text('Clear'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Validate input
+              if (titleController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a title'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              
+              // Create updated action
+              final updatedAction = _action!.copyWith(
+                title: titleController.text.trim(),
+                description: descriptionController.text.trim(),
+                category: category,
+                priority: priority,
+                dueDate: dueDate,
+                updatedAt: DateTime.now(),
+              );
+              
+              Navigator.of(context).pop();
+              
+              // Update the action
+              await _updateAction(updatedAction);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateAction(ActionItem updatedAction) async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Updating action...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      
+      // Update via ActionService
+      final success = await ActionService.updateAction(updatedAction);
+      
+      if (success != null) {
+        // Update local state
+        setState(() {
+          _action = updatedAction;
+        });
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception('Update returned null');
+      }
+    } catch (e) {
+      print('Error updating action: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update action: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showActivityDetailsDialog(ActionActivity activity) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(activity.title),
+        content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                'Description:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              Text(value),
-              if (date != null)
-                Text(
-                  'Date: $date',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
+              const SizedBox(height: 4),
+              Text(activity.description),
+              const SizedBox(height: 16),
+              Text(
+                'Status:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    activity.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                    color: activity.isCompleted ? Colors.green : Colors.grey,
+                    size: 16,
                   ),
+                  const SizedBox(width: 8),
+                  Text(activity.isCompleted ? 'Completed' : 'In Progress'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Created:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(DateFormat('yyyy-MM-dd HH:mm').format(activity.createdAt)),
+              if (activity.completedAt != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Completed:',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 4),
+                Text(DateFormat('yyyy-MM-dd HH:mm').format(activity.completedAt!)),
+              ],
+              if (activity.impactValue != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Impact:',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text('${activity.impactValue} ${activity.impactUnit ?? ''}'),
+              ],
             ],
           ),
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showEditActivityDialog(activity);
+            },
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
     );
   }
 

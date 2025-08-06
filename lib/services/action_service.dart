@@ -34,6 +34,45 @@ class ActionService {
     }
   }
 
+  /// Get a single action by ID
+  static Future<ActionItem?> getActionById(String actionId) async {
+    try {
+      final response = await _supabase
+          .from('user_actions')
+          .select('''
+            *,
+            sdg_targets!sdg_target_id (*)
+          ''')
+          .eq('id', actionId)
+          .maybeSingle();
+
+      if (response == null) {
+        return null;
+      }
+
+      // Create the action item from the response
+      final action = ActionItem.fromJson(response);
+      
+      // If there's SDG target data in the response, parse it
+      if (response['sdg_targets'] != null) {
+        try {
+          // Create SdgTarget from the nested data
+          final sdgTarget = SdgTarget.fromJson(response['sdg_targets']);
+          
+          // Return action with the SDG target
+          return action.copyWith(sdgTarget: sdgTarget);
+        } catch (e) {
+          print('Error parsing SDG target data: $e');
+        }
+      }
+      
+      return action;
+    } catch (e) {
+      print('Error fetching action by ID $actionId: $e');
+      throw Exception('Failed to fetch action: $e');
+    }
+  }
+
   /// Get all actions for a user
   static Future<List<ActionItem>> getUserActions(String userId) async {
     try {

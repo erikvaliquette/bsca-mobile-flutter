@@ -73,14 +73,7 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(builder: (context) => const ProfileScreen()),
             ),
           ),
-          MoreMenuItem(
-            title: 'Actions',
-            icon: Icons.play_arrow,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ActionsScreen()),
-            ),
-          ),
+
           MoreMenuItem(
             title: 'My Travel Emissions',
             icon: Icons.analytics,

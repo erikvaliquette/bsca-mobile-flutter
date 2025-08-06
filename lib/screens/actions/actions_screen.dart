@@ -10,6 +10,7 @@ import 'package:bsca_mobile_flutter/providers/action_provider.dart';
 import 'package:bsca_mobile_flutter/providers/subscription_provider.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
+import 'package:bsca_mobile_flutter/providers/user_sdg_provider.dart';
 import 'package:bsca_mobile_flutter/utils/sdg_icons.dart';
 import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
 import 'package:bsca_mobile_flutter/widgets/add_action_dialog.dart';
@@ -59,14 +60,15 @@ class _ActionsScreenState extends State<ActionsScreen> {
     });
 
     try {
-      // For development purposes, use mock data if Supabase is not properly set up
-      // Remove this in production and use the actual Supabase query
+      // Load user's selected SDGs from UserSdgProvider
+      final userSdgProvider = Provider.of<UserSdgProvider>(context, listen: false);
+      await userSdgProvider.loadUserSdgs();
+      
       setState(() {
-        // Mock data for testing - using SDGs 13, 17, and 12 as examples
-        _userSDGs = [13, 17, 12];
+        _userSDGs = userSdgProvider.selectedSdgIds;
         _isLoading = false;
       });
-      print('Loaded mock SDGs: $_userSDGs');
+      print('Loaded user SDGs from provider: $_userSDGs');
       
       /* Uncomment this for actual Supabase integration
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -193,9 +195,43 @@ class _ActionsScreenState extends State<ActionsScreen> {
     }
   }
 
-  Widget _buildUserSDGsGrid() {
-    print('Building user SDGs grid with ${_userSDGs.length} SDGs');
+  Widget _buildUserSDGsGrid(List<int> selectedSdgIds) {
+    print('Building user SDGs grid with ${selectedSdgIds.length} SDGs');
     try {
+      if (selectedSdgIds.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.eco,
+                  size: 48,
+                  color: Colors.grey,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'No SDGs selected yet',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Go to SDG Goals screen to select your focus areas',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      
       return GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -205,10 +241,10 @@ class _ActionsScreenState extends State<ActionsScreen> {
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
         ),
-        itemCount: _userSDGs.length,
+        itemCount: selectedSdgIds.length,
         itemBuilder: (context, index) {
           try {
-            final sdgId = _userSDGs[index];
+            final sdgId = selectedSdgIds[index];
             print('Building grid item for SDG $sdgId');
             final sdg = SDGGoal.getById(sdgId);
             
@@ -242,69 +278,60 @@ class _ActionsScreenState extends State<ActionsScreen> {
   }
 
   Widget _buildSDGListView() {
-    print('Building SDG list view with ${_userSDGs.length} user SDGs');
-    try {
-      return SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Your Selected SDGs Section
-              Card(
-                elevation: 2.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Your Selected SDGs',
-                        style: TextStyle(
-                          fontSize: 22.0,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      const Text(
-                        'Track your progress and impact on the UN Sustainable Development Goals you\'ve selected.',
-                        style: TextStyle(
-                          fontSize: 16.0,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16.0),
-                      if (_userSDGs.isEmpty)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24.0),
-                            child: Text(
-                              'You haven\'t selected any SDGs yet. Visit your profile to select SDGs that matter to you.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 16.0,
-                                color: Colors.grey,
-                              ),
+    return Consumer<UserSdgProvider>(
+      builder: (context, userSdgProvider, child) {
+        final selectedSdgIds = userSdgProvider.selectedSdgIds;
+        print('Building SDG list view with ${selectedSdgIds.length} user SDGs from provider');
+        
+        try {
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Your Selected SDGs Section
+                  Card(
+                    elevation: 2.0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                     child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your Selected SDGs',
+                            style: TextStyle(
+                              fontSize: 22.0,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        )
-                      else
-                        _buildUserSDGsGrid(),
-                    ],
+                          const SizedBox(height: 8.0),
+                          const Text(
+                            'Track your progress and impact on the UN Sustainable Development Goals you\'ve selected.',
+                            style: TextStyle(
+                              fontSize: 16.0,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 16.0),
+                          _buildUserSDGsGrid(selectedSdgIds),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      print('Error in _buildSDGListView: $e');
-      return const Center(child: Text('Error loading SDG view'));
-    }
+            ),
+          );
+        } catch (e) {
+          print('Error in _buildSDGListView: $e');
+          return const Center(child: Text('Error loading SDG view'));
+        }
+      },
+    );
   }
 
   // _buildAllSDGsList method removed as it's no longer needed
@@ -454,6 +481,32 @@ class _ActionsScreenState extends State<ActionsScreen> {
   // Helper methods for action management
   String _formatCategoryName(String category) {
     return category[0].toUpperCase() + category.substring(1);
+  }
+
+  List<DropdownMenuItem<String>> _buildCategoryItems(String currentCategory) {
+    // New action type categories
+    const newCategories = ['reduction', 'innovation', 'education', 'policy'];
+    
+    // Legacy categories for backward compatibility
+    const legacyCategories = ['personal', 'community', 'workplace', 'energy', 'water', 'waste', 'transportation', 'food', 'biodiversity', 'other'];
+    
+    // Build list of available categories
+    List<String> availableCategories = List.from(newCategories);
+    
+    // If current category is a legacy category not in new list, add it for backward compatibility
+    if (!newCategories.contains(currentCategory) && legacyCategories.contains(currentCategory)) {
+      availableCategories.add(currentCategory);
+    }
+    
+    return availableCategories.map((String value) {
+      return DropdownMenuItem<String>(
+        value: value,
+        child: Text(
+          value.substring(0, 1).toUpperCase() + value.substring(1) + 
+          (legacyCategories.contains(value) ? ' (Legacy)' : ''),
+        ),
+      );
+    }).toList();
   }
 
   Color _getPriorityColor(String priority) {
@@ -607,17 +660,7 @@ class _ActionsScreenState extends State<ActionsScreen> {
                       labelText: 'Category',
                       border: OutlineInputBorder(),
                     ),
-                    items: [
-                      'reduction',
-                      'innovation',
-                      'education',
-                      'policy',
-                    ].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value.substring(0, 1).toUpperCase() + value.substring(1)),
-                      );
-                    }).toList(),
+                    items: _buildCategoryItems(category),
                     onChanged: (newValue) {
                       setState(() {
                         category = newValue!;
