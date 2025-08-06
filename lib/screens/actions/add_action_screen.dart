@@ -7,6 +7,8 @@ import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 import 'package:bsca_mobile_flutter/providers/action_provider.dart';
 import 'package:bsca_mobile_flutter/services/action_activity_service.dart';
+import 'package:bsca_mobile_flutter/services/action_attribution_service.dart';
+import 'package:bsca_mobile_flutter/widgets/organization_attribution_widget.dart';
 import 'package:uuid/uuid.dart';
 
 class AddActionScreen extends StatefulWidget {
@@ -307,7 +309,16 @@ class _AddActionScreenState extends State<AddActionScreen> {
           onTap: _selectDueDate,
         ),
         const SizedBox(height: 16),
-        _buildOrganizationSelector(),
+        OrganizationAttributionWidget(
+          currentOrganizationId: _selectedOrganizationId,
+          onOrganizationSelected: (organizationId) {
+            setState(() {
+              _selectedOrganizationId = organizationId;
+            });
+          },
+          attributionType: 'action',
+          helpText: 'Choose whether this action is personal or should be attributed to an organization.',
+        ),
       ],
     );
   }
@@ -465,43 +476,7 @@ class _AddActionScreenState extends State<AddActionScreen> {
     );
   }
 
-  Widget _buildOrganizationSelector() {
-    return Consumer<OrganizationProvider>(
-      builder: (context, orgProvider, child) {
-        final organizations = orgProvider.organizations;
-        
-        if (organizations.isEmpty) {
-          return const SizedBox.shrink();
-        }
 
-        return DropdownButtonFormField<String>(
-          value: _selectedOrganizationId,
-          decoration: const InputDecoration(
-            labelText: 'Organization (Optional)',
-            hintText: 'Select organization for business actions',
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            const DropdownMenuItem<String>(
-              value: null,
-              child: Text('Personal Action'),
-            ),
-            ...organizations.map((org) {
-              return DropdownMenuItem<String>(
-                value: org.id,
-                child: Text(org.name),
-              );
-            }),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _selectedOrganizationId = value;
-            });
-          },
-        );
-      },
-    );
-  }
 
   Future<void> _selectDueDate() async {
     final DateTime? picked = await showDatePicker(
@@ -552,6 +527,24 @@ class _AddActionScreenState extends State<AddActionScreen> {
 
       if (createdAction == null) {
         throw Exception('Failed to create action');
+      }
+
+      // Handle organization attribution if selected
+      if (_selectedOrganizationId != null) {
+        final impactValue = _createInitialActivity && _impactValueController.text.isNotEmpty
+            ? double.tryParse(_impactValueController.text)
+            : null;
+        final impactUnit = _createInitialActivity && _impactUnitController.text.isNotEmpty
+            ? _impactUnitController.text
+            : null;
+            
+        await ActionAttributionService.instance.createActionOrganizationAttribution(
+          createdAction.id,
+          _selectedOrganizationId!,
+          userId,
+          impactValue: impactValue,
+          impactUnit: impactUnit,
+        );
       }
 
       // Create initial activity if requested

@@ -2,11 +2,15 @@ import 'package:bsca_mobile_flutter/models/action_item.dart';
 import 'package:bsca_mobile_flutter/models/action_measurement.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target_data.dart';
+import 'package:bsca_mobile_flutter/models/action_attribution_model.dart';
 import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
+import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 import 'package:bsca_mobile_flutter/services/action_target_integration_service.dart';
+import 'package:bsca_mobile_flutter/services/action_attribution_service.dart';
 import 'package:bsca_mobile_flutter/services/sdg_target_data_service.dart';
 import 'package:bsca_mobile_flutter/services/sdg_target_service.dart';
 import 'package:bsca_mobile_flutter/services/supabase/supabase_client.dart';
+import 'package:bsca_mobile_flutter/widgets/organization_attribution_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,9 +29,11 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
   late ActionTargetIntegrationService _integrationService;
   late ActionItem _action;
   List<SdgTargetData> _targetData = [];
+  List<ActionAttributionModel> _attributions = [];
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
+  bool _showAttributionEdit = false;
 
   final TextEditingController _measurementController = TextEditingController();
   final TextEditingController _baselineController = TextEditingController();
@@ -54,13 +60,25 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
     });
 
     try {
+      // Load target data and attribution data in parallel
+      final futures = <Future>[];
+      
       // Load target data if this action is linked to an SDG target
       if (_action.sdgTargetId != null) {
-        final targetData = await _integrationService.getTargetDataForAction(_action);
-        setState(() {
-          _targetData = targetData;
-        });
+        futures.add(_integrationService.getTargetDataForAction(_action));
+      } else {
+        futures.add(Future.value(<SdgTargetData>[]));
       }
+      
+      // Load attribution data for this action
+      futures.add(ActionAttributionService.instance.getActionAttributions(_action.id));
+      
+      final results = await Future.wait(futures);
+      
+      setState(() {
+        _targetData = results[0] as List<SdgTargetData>;
+        _attributions = results[1] as List<ActionAttributionModel>;
+      });
       
       // Set initial values for controllers
       if (_action.baselineValue != null) {
@@ -271,6 +289,10 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         children: [
           // Action details section
           _buildActionDetails(),
+          const Divider(height: 32),
+          
+          // Attribution section
+          _buildAttributionSection(),
           const Divider(height: 32),
           
           // Tracking section
@@ -860,5 +882,229 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildAttributionSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Attribution',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (_attributions.isNotEmpty)
+                  IconButton(
+                    icon: Icon(_showAttributionEdit ? Icons.close : Icons.edit),
+                    onPressed: () {
+                      setState(() {
+                        _showAttributionEdit = !_showAttributionEdit;
+                      });
+                    },
+                    tooltip: _showAttributionEdit ? 'Cancel Edit' : 'Edit Attribution',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            if (_attributions.isEmpty) ..[
+              // No attribution - personal action
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.person, color: Colors.grey[600]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Personal Action',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          Text(
+                            'This action is not attributed to any organization',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ..[
+              // Has attribution - show organization info
+              for (final attribution in _attributions.where((a) => a.isActive)) ..[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green[200]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.business, color: Colors.green[600]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              attribution.organization?['name'] ?? 'Organization',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green[800],
+                              ),
+                            ),
+                            if (attribution.organization?['description'] != null)
+                              Text(
+                                attribution.organization!['description'],
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[600],
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text(
+                                  'Attributed: ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green[600],
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat('MMM d, yyyy').format(attribution.attributionDate),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green[700],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (attribution.impactValue != null) ..[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(Icons.trending_up, size: 16, color: Colors.green[600]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Impact: ${attribution.impactValue} ${attribution.impactUnit ?? ''}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green[700],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+            
+            // Attribution edit section
+            if (_showAttributionEdit) ..[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Manage Attribution',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              OrganizationAttributionWidget(
+                currentOrganizationId: _attributions.isNotEmpty 
+                    ? _attributions.first.organizationId 
+                    : null,
+                onOrganizationSelected: (organizationId) {
+                  _handleAttributionChange(organizationId);
+                },
+                attributionType: 'action',
+                helpText: 'Change the attribution of this action between personal and organizational.',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleAttributionChange(String? newOrganizationId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final currentAttribution = _attributions.isNotEmpty ? _attributions.first : null;
+      final oldOrganizationId = currentAttribution?.organizationId;
+      
+      // Use the reattribution logic from ActionAttributionService
+      await ActionAttributionService.instance.handleActionReattribution(
+        actionId: _action.id,
+        oldOrganizationId: oldOrganizationId,
+        newOrganizationId: newOrganizationId,
+        attributedBy: _action.userId, // Assuming the action has userId field
+        impactValue: _action.impactValue,
+        impactUnit: _action.impactUnit,
+      );
+
+      // Reload attribution data
+      await _loadData();
+      
+      setState(() {
+        _showAttributionEdit = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newOrganizationId == null 
+                ? 'Action changed to personal'
+                : 'Action attributed to organization',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating attribution: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 }
