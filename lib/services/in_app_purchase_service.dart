@@ -29,9 +29,9 @@ class InAppPurchaseService {
   // Product IDs for each tier
   // These should match the IDs configured in App Store Connect and Google Play Console
   static const Map<ServiceLevel, String> _productIds = {
-    ServiceLevel.professional: 'com.bsca.mobile.subscription.professional',
-    ServiceLevel.enterprise: 'com.bsca.mobile.subscription.enterprise',
-    ServiceLevel.impactPartner: 'com.bsca.mobile.subscription.impactpartner',
+    ServiceLevel.professional: 'com.bsca.bscaMobileFlutter.subscription.professional',
+    ServiceLevel.enterprise: 'com.bsca.bscaMobileFlutter.subscription.enterprise',
+    ServiceLevel.impactPartner: 'com.bsca.bscaMobileFlutter.subscription.impactpartner',
   };
 
   // Getters
@@ -61,19 +61,31 @@ class InAppPurchaseService {
 
   /// Load available products from the stores
   Future<void> loadProducts() async {
-    if (!_isAvailable) return;
+    if (!_isAvailable) {
+      debugPrint('In-app purchases not available, skipping product loading');
+      return;
+    }
 
     try {
       final productIds = _productIds.values.toSet();
+      debugPrint('Querying product IDs: $productIds');
+      
       final ProductDetailsResponse response = 
           await _inAppPurchase.queryProductDetails(productIds);
 
       if (response.notFoundIDs.isNotEmpty) {
         debugPrint('Products not found: ${response.notFoundIDs}');
+        debugPrint('Note: Products must be created in App Store Connect and approved before they appear here.');
       }
 
       _products = response.productDetails;
       debugPrint('Products loaded: ${_products.length}');
+      
+      if (_products.isNotEmpty) {
+        for (final product in _products) {
+          debugPrint('Found product: ${product.id} - ${product.title} - ${product.price}');
+        }
+      }
     } catch (e) {
       debugPrint('Error loading products: $e');
     }

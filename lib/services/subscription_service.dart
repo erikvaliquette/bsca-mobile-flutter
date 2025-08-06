@@ -214,11 +214,11 @@ enum ServiceLevel {
     }
   }
 
-  /// Convert to database string (for backward compatibility)
+  /// Convert to database string (for backward compatibility with web interface)
   String get databaseValue {
     switch (this) {
       case ServiceLevel.free:
-        return 'GENESIS'; // Keep existing database values for now
+        return 'GENESIS'; // Keep existing database values for web compatibility
       case ServiceLevel.professional:
         return 'NODE';
       case ServiceLevel.enterprise:
