@@ -5,6 +5,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/pricing_screen.dart';
 import 'screens/subscription_management_screen.dart';
@@ -47,7 +48,10 @@ class BscaApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       initialRoute: '/',
       routes: {
-        '/': (context) => const AuthWrapper(),
+        '/': (context) => AnimatedSplashScreen(
+              child: const AuthWrapper(),
+              duration: const Duration(seconds: 3),
+            ),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),

@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -26,11 +26,30 @@ class LocalStorageService {
   /// Initialize Hive and open boxes
   Future<void> init() async {
     try {
-      // Initialize Hive
-      final appDocumentDir = await getApplicationDocumentsDirectory();
-      await Hive.initFlutter(appDocumentDir.path);
+      // Initialize Hive with appropriate path based on platform
+      if (kIsWeb) {
+        // For web platform, just initialize Hive without a path
+        await Hive.initFlutter();
+        debugPrint('Initialized Hive for web platform');
+      } else {
+        // For non-web platforms, use the application documents directory
+        try {
+          final appDocumentDir = await getApplicationDocumentsDirectory();
+          await Hive.initFlutter(appDocumentDir.path);
+          
+          // Force delete any lock files that might be preventing box opening
+          // Only do this on non-web platforms
+          await _forceDeleteLockFiles(appDocumentDir.path, _tripsBoxName);
+          await _forceDeleteLockFiles(appDocumentDir.path, _locationsBoxName);
+          await _forceDeleteLockFiles(appDocumentDir.path, _connectionsBoxName);
+        } catch (e) {
+          // Fallback if path_provider fails
+          debugPrint('Error getting app directory: $e, initializing Hive without path');
+          await Hive.initFlutter();
+        }
+      }
       
-      // Register adapters
+      // Register adapters (same for all platforms)
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(LocalTripDataAdapter());
       }
@@ -40,11 +59,6 @@ class LocalStorageService {
       if (!Hive.isAdapterRegistered(2)) {
         Hive.registerAdapter(LocalBusinessConnectionAdapter());
       }
-      
-      // Force delete any lock files that might be preventing box opening
-      await _forceDeleteLockFiles(appDocumentDir.path, _tripsBoxName);
-      await _forceDeleteLockFiles(appDocumentDir.path, _locationsBoxName);
-      await _forceDeleteLockFiles(appDocumentDir.path, _connectionsBoxName);
       
       // Open boxes with recovery options and retry mechanism
       _tripsBox = await _openBoxSafely<LocalTripData>(_tripsBoxName);
@@ -93,7 +107,12 @@ class LocalStorageService {
   
   /// Force delete lock files that might be preventing box opening
   Future<void> _forceDeleteLockFiles(String basePath, String boxName) async {
+    // Skip this operation on web platform
+    if (kIsWeb) return;
+    
     try {
+      // We're using dart:io here, but this method is only called when not on web
+      // so it's safe to use File directly
       final lockFile = File('$basePath/$boxName.lock');
       if (await lockFile.exists()) {
         await lockFile.delete();

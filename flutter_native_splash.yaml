@@ -1,0 +1,32 @@
+flutter_native_splash:
+  # Background color of the splash screen
+  color: "#FFFFFF"
+  
+  # You can also use a background image instead of a solid color
+  # background_image: "assets/images/background.png"
+  
+  # Image to be displayed in the center of the splash screen
+  image: assets/images/logo/app_logo.png
+  
+  # Splash screen will remain until flutter has fully rendered the first frame
+  # This is the recommended approach
+  android_12:
+    # The image parameter sets the splash screen icon image
+    image: assets/images/logo/app_logo.png
+    
+    # The color parameter sets the background color
+    color: "#FFFFFF"
+    
+    # The icon_background_color parameter sets the background color for the app icon
+    icon_background_color: "#FFFFFF"
+
+  # Splash screen will remain for a fixed time (milliseconds)
+  # This is an alternative approach if you want more control
+  # android_screen_orientation: portrait
+  # fullscreen: true
+
+  # iOS configuration
+  ios: true
+  
+  # Web configuration (optional)
+  web: false

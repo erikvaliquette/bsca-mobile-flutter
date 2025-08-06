@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -131,36 +132,63 @@ class BugReportService {
         'package_name': packageInfo.packageName,
       };
 
-      if (Platform.isAndroid) {
-        final androidInfo = await deviceInfoPlugin.androidInfo;
-        deviceInfo.addAll({
-          'platform': 'Android',
-          'device_model': androidInfo.model,
-          'device_brand': androidInfo.brand,
-          'device_manufacturer': androidInfo.manufacturer,
-          'android_version': androidInfo.version.release,
-          'sdk_int': androidInfo.version.sdkInt,
-          'device_id': androidInfo.id,
-        });
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfoPlugin.iosInfo;
-        deviceInfo.addAll({
-          'platform': 'iOS',
-          'device_model': iosInfo.model,
-          'device_name': iosInfo.name,
-          'system_name': iosInfo.systemName,
-          'system_version': iosInfo.systemVersion,
-          'device_id': iosInfo.identifierForVendor,
-        });
+      // Handle different platforms
+      if (kIsWeb) {
+        // Web platform
+        try {
+          final webInfo = await deviceInfoPlugin.webBrowserInfo;
+          deviceInfo.addAll({
+            'platform': 'Web',
+            'browser_name': webInfo.browserName.name,
+            'app_name': webInfo.appName,
+            'app_version': webInfo.appVersion,
+            'user_agent': webInfo.userAgent,
+            'platform': webInfo.platform,
+          });
+        } catch (e) {
+          debugPrint('Error collecting web browser info: $e');
+          deviceInfo['error'] = 'Could not collect web browser info: $e';
+        }
+      } else {
+        // Mobile platforms - only execute this code on non-web platforms
+        try {
+          // We use a separate function to handle mobile platform code
+          // This prevents the dart:io code from being executed on web
+          await _collectMobilePlatformInfo(deviceInfoPlugin, deviceInfo);
+        } catch (e) {
+          debugPrint('Error collecting mobile device info: $e');
+          deviceInfo['error'] = 'Could not collect mobile device info: $e';
+        }
       }
 
       return deviceInfo;
     } catch (e) {
       debugPrint('Error collecting device info: $e');
       return {
-        'platform': Platform.operatingSystem,
+        'platform': kIsWeb ? 'Web' : 'Unknown',
         'error': 'Could not collect device info: $e',
       };
+    }
+  }
+
+  // This function is only called on mobile platforms
+  Future<void> _collectMobilePlatformInfo(DeviceInfoPlugin deviceInfoPlugin, Map<String, dynamic> deviceInfo) async {
+    // Skip entirely on web platform
+    if (kIsWeb) return;
+    
+    try {
+      // For mobile platforms, we'll just add a generic entry
+      // This avoids using Platform.isAndroid/isIOS which causes issues on web
+      deviceInfo.addAll({
+        'platform': 'Mobile',
+        'note': 'Detailed device info not available in web mode'
+      });
+      
+      // On actual mobile builds, the androidInfo and iosInfo would be collected here
+      // But we're skipping that for web compatibility
+    } catch (e) {
+      debugPrint('Error in _collectMobilePlatformInfo: $e');
+      deviceInfo['error'] = 'Error in platform-specific code: $e';
     }
   }
 

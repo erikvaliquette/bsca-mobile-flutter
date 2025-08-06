@@ -608,19 +608,14 @@ class _ActionsScreenState extends State<ActionsScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: [
-                      'personal',
-                      'energy',
-                      'water',
-                      'waste',
-                      'transportation',
-                      'food',
-                      'biodiversity',
-                      'community',
-                      'other',
+                      'reduction',
+                      'innovation',
+                      'education',
+                      'policy',
                     ].map((String value) {
                       return DropdownMenuItem<String>(
                         value: value,
-                        child: Text(_formatCategoryName(value)),
+                        child: Text(value.substring(0, 1).toUpperCase() + value.substring(1)),
                       );
                     }).toList(),
                     onChanged: (newValue) {

@@ -3,11 +3,15 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/action_item.dart';
 import '../models/action_measurement.dart';
+import '../models/action_activity.dart';
 import '../providers/action_provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/action_measurement_service.dart';
+import '../services/action_activity_service.dart';
 import '../widgets/action_measurement_dialog.dart';
 import '../widgets/action_target_dialog.dart';
 import '../widgets/action_progress_chart.dart';
+import '../widgets/add_activity_dialog.dart';
 
 class ActionDetailScreen extends StatefulWidget {
   final String actionId;
@@ -25,7 +29,9 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
   bool _isLoading = true;
   ActionItem? _action;
   List<ActionMeasurement> _measurements = [];
+  List<ActionActivity> _activities = [];
   String? _errorMessage;
+  bool _isLoadingActivities = false;
 
   @override
   void initState() {
@@ -52,12 +58,14 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         return;
       }
       
-      // Load measurements for this action
+      // Load measurements and activities for this action
       final measurements = await ActionMeasurementService.getMeasurementsForAction(widget.actionId);
+      final activities = await ActionActivityService.getActivitiesForAction(widget.actionId);
       
       setState(() {
         _action = action;
         _measurements = measurements;
+        _activities = activities;
         _isLoading = false;
       });
     } catch (e) {
@@ -140,6 +148,118 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
     
     if (result == true) {
       await _loadActionData();
+    }
+  }
+
+  Future<void> _showAddActivityDialog() async {
+    if (_action == null) return;
+    
+    final result = await showDialog<ActionActivity?>(
+      context: context,
+      builder: (context) => AddActivityDialog(
+        actionId: _action!.id,
+        organizationId: _action!.organizationId,
+      ),
+    );
+    
+    if (result != null) {
+      await _loadActionData();
+    }
+  }
+
+  Future<void> _showEditActivityDialog(ActionActivity activity) async {
+    final result = await showDialog<ActionActivity?>(
+      context: context,
+      builder: (context) => AddActivityDialog(
+        actionId: activity.actionId,
+        organizationId: activity.organizationId,
+        activity: activity,
+      ),
+    );
+    
+    if (result != null) {
+      await _loadActionData();
+    }
+  }
+
+  Future<void> _completeActivity(ActionActivity activity) async {
+    try {
+      setState(() {
+        _isLoadingActivities = true;
+      });
+      
+      await ActionActivityService.completeActivity(activity.id);
+      await _loadActionData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Activity marked as completed!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing activity: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingActivities = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteActivity(ActionActivity activity) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Activity'),
+        content: Text('Are you sure you want to delete "${activity.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      try {
+        await ActionActivityService.deleteActivity(activity.id);
+        await _loadActionData();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Activity deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting activity: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -313,6 +433,10 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
               ),
             ),
           
+          // Activities section
+          const SizedBox(height: 24),
+          _buildActivitiesSection(),
+          
           // Measurements list
           const SizedBox(height: 24),
           _buildMeasurementsSection(),
@@ -398,6 +522,301 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildActivitiesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Activities (Tactical Level)',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: _showAddActivityDialog,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add Activity'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Specific tactical actions to execute this strategic action',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[600],
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        if (_activities.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.assignment_outlined,
+                    size: 48,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No activities yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add specific activities to break down this action into manageable tasks',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _activities.length,
+            itemBuilder: (context, index) {
+              final activity = _activities[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ExpansionTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _getStatusColor(activity.status),
+                    child: Icon(
+                      _getStatusIcon(activity.status),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    activity.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      decoration: activity.isCompleted ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(activity.statusDisplayName),
+                      if (activity.hasImpact)
+                        Text(
+                          'Impact: ${activity.impactValue} ${activity.impactUnit}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.green,
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          _showEditActivityDialog(activity);
+                          break;
+                        case 'complete':
+                          _completeActivity(activity);
+                          break;
+                        case 'delete':
+                          _deleteActivity(activity);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit),
+                          title: Text('Edit'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      if (!activity.isCompleted)
+                        const PopupMenuItem(
+                          value: 'complete',
+                          child: ListTile(
+                            leading: Icon(Icons.check_circle, color: Colors.green),
+                            title: Text('Mark Complete'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete, color: Colors.red),
+                          title: Text('Delete'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Description:',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(activity.description),
+                          const SizedBox(height: 12),
+                          
+                          if (activity.verificationMethod != null) ...[
+                            Text(
+                              'Verification Method:',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(activity.verificationMethod!),
+                            const SizedBox(height: 12),
+                          ],
+                          
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Created:',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(DateFormat('MMM dd, yyyy').format(activity.createdAt)),
+                                  ],
+                                ),
+                              ),
+                              if (activity.completedAt != null)
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Completed:',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      Text(DateFormat('MMM dd, yyyy').format(activity.completedAt!)),
+                                    ],
+                                  ),
+                                ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Verification:',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      activity.verificationStatusDisplayName,
+                                      style: TextStyle(
+                                        color: _getVerificationColor(activity.verificationStatus),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          if (activity.hasEvidence) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'Evidence:',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              children: activity.evidenceUrls!.map((url) {
+                                return Chip(
+                                  label: const Text('View Evidence'),
+                                  avatar: const Icon(Icons.link, size: 16),
+                                  onDeleted: () {
+                                    // TODO: Implement evidence viewing
+                                  },
+                                  deleteIcon: const Icon(Icons.open_in_new, size: 16),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'planned':
+        return Colors.blue;
+      case 'in_progress':
+        return Colors.orange;
+      case 'completed':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'planned':
+        return Icons.schedule;
+      case 'in_progress':
+        return Icons.play_arrow;
+      case 'completed':
+        return Icons.check;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help;
+    }
+  }
+
+  Color _getVerificationColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'verified':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildMeasurementsSection() {
