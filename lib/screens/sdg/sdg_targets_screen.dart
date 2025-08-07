@@ -4,6 +4,7 @@ import 'package:bsca_mobile_flutter/models/sdg_goal.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target.dart';
 import 'package:bsca_mobile_flutter/models/action_item.dart';
 import 'package:bsca_mobile_flutter/models/action_activity.dart';
+// Organization model import removed - using direct name lookup instead
 import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
 import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
@@ -17,8 +18,13 @@ import 'package:bsca_mobile_flutter/screens/action_detail_screen.dart';
 
 class SdgTargetsScreen extends StatefulWidget {
   final SDGGoal sdg;
+  final String? organizationId; // Optional organization ID for organization SDG targets
 
-  const SdgTargetsScreen({Key? key, required this.sdg}) : super(key: key);
+  const SdgTargetsScreen({
+    Key? key, 
+    required this.sdg, 
+    this.organizationId,
+  }) : super(key: key);
 
   @override
   _SdgTargetsScreenState createState() => _SdgTargetsScreenState();
@@ -49,11 +55,22 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
         throw Exception('User not authenticated');
       }
       
-      // Load targets and actions in parallel
-      await Future.wait([
-        sdgTargetProvider.loadTargetsForSDG(widget.sdg.id),
-        actionProvider.loadUserActions(userId),
-      ]);
+      // Check if we're in organization mode
+      final bool isOrganizationMode = widget.organizationId != null;
+      
+      if (isOrganizationMode) {
+        // Load organization-specific targets and actions
+        await Future.wait([
+          sdgTargetProvider.loadTargetsForOrganizationSDG(widget.organizationId!, widget.sdg.id),
+          actionProvider.loadOrganizationActions(widget.organizationId!),
+        ]);
+      } else {
+        // Load personal targets and actions
+        await Future.wait([
+          sdgTargetProvider.loadTargetsForSDG(widget.sdg.id),
+          actionProvider.loadUserActions(userId),
+        ]);
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error loading data: $e')),
@@ -69,9 +86,14 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
   
   @override
   Widget build(BuildContext context) {
+    final bool isOrganizationMode = widget.organizationId != null;
+    final String title = isOrganizationMode 
+        ? 'Organization SDG ${widget.sdg.id} Targets'
+        : 'SDG ${widget.sdg.id} Targets';
+        
     return Scaffold(
       appBar: AppBar(
-        title: Text('SDG ${widget.sdg.id} Targets'),
+        title: Text(title),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -80,7 +102,13 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTargetDialog,
+        onPressed: () {
+          if (isOrganizationMode) {
+            _showAddOrganizationTargetDialog();
+          } else {
+            _showAddTargetDialog();
+          }
+        },
         child: const Icon(Icons.add),
         tooltip: 'Add Target',
       ),
@@ -787,6 +815,140 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
     }
   }
   
+  Future<void> _showAddOrganizationTargetDialog() async {
+    // Similar to _showAddTargetDialog but specifically for organization targets
+    final targetNameController = TextEditingController();
+    final actionDescriptionController = TextEditingController();
+    final targetNumberController = TextEditingController();
+    
+    // For organization targets, we already know the organization ID
+    final String organizationId = widget.organizationId!;
+    
+    // Get organization name for display
+    final orgProvider = Provider.of<OrganizationProvider>(context, listen: false);
+    String organizationName = 'Organization';
+    
+    try {
+      final organization = orgProvider.organizations.firstWhere(
+        (org) => org.id == organizationId,
+      );
+      organizationName = organization.name;
+    } catch (e) {
+      // Use default name if organization not found
+    }
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Target for $organizationName - SDG ${widget.sdg.id}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Target Number
+              TextField(
+                controller: targetNumberController,
+                decoration: const InputDecoration(
+                  labelText: 'Target Number (e.g., 1, 2, 3)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              
+              // Target Name (maps to description in database)
+              TextField(
+                controller: targetNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Target Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Action Description
+              TextField(
+                controller: actionDescriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Validate inputs
+              if (targetNameController.text.isEmpty || targetNumberController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please fill in all required fields')),
+                );
+                return;
+              }
+              
+              final targetNumber = int.tryParse(targetNumberController.text);
+              if (targetNumber == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a valid target number')),
+                );
+                return;
+              }
+              
+              // Get current user ID
+              final authProvider = Provider.of<AuthProvider>(context, listen: false);
+              final userId = authProvider.user?.id;
+              
+              if (userId == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('You must be logged in to create targets')),
+                );
+                return;
+              }
+              
+              // Create the target with organization ID pre-filled
+              final newTarget = SdgTarget(
+                id: '', // Will be generated by Supabase
+                sdgId: widget.sdg.id,
+                sdgGoalNumber: widget.sdg.id,
+                targetNumber: targetNumber,
+                description: targetNameController.text,
+                actionDescription: actionDescriptionController.text.isNotEmpty ? actionDescriptionController.text : null,
+                userId: userId,
+                organizationId: organizationId, // Always set for organization targets
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              );
+              
+              // Save the target
+              final sdgTargetProvider = Provider.of<SdgTargetProvider>(context, listen: false);
+              final result = await sdgTargetProvider.createTarget(newTarget);
+              
+              if (result != null) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Organization target created successfully')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to create target: ${sdgTargetProvider.error}')),
+                );
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showAddTargetDialog() async {
     final targetNameController = TextEditingController(); // This will be used for description field
     final actionDescriptionController = TextEditingController();

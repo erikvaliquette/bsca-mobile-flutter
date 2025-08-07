@@ -20,6 +20,8 @@ class SubscriptionProvider extends ChangeNotifier {
   ServiceLevel get currentServiceLevel => _subscription?.serviceLevel ?? ServiceLevel.free;
   bool get hasActiveSubscription => _subscription?.isActive ?? false;
   bool get isSubscriptionExpiringSoon => _subscription?.isExpiringSoon() ?? false;
+  bool get isSubscriptionExpired => _subscription?.isExpired ?? false;
+  bool get shouldDisplayAsExpired => _subscription?.shouldDisplayAsExpired ?? false;
   Map<String, dynamic> get displayInfo => _subscription?.displayInfo ?? {};
 
   final SubscriptionService _subscriptionService = SubscriptionService.instance;

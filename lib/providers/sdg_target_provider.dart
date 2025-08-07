@@ -85,6 +85,28 @@ class SdgTargetProvider with ChangeNotifier {
     }
   }
   
+  /// Load targets for a specific organization and SDG
+  Future<List<SdgTarget>> loadTargetsForOrganizationSDG(String organizationId, int sdgId) async {
+    _setLoading(true);
+    _setError(null);
+    
+    try {
+      final targets = await _targetService.getTargetsByOrganizationAndSDG(organizationId, sdgId);
+      
+      // Update the cache for this SDG
+      _targetsBySDG[sdgId] = targets;
+      
+      _setLoading(false);
+      notifyListeners();
+      return targets;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      notifyListeners();
+      return [];
+    }
+  }
+  
   /// Load targets for a specific user
   Future<List<SdgTarget>> loadTargetsForUser(String userId) async {
     _setLoading(true);

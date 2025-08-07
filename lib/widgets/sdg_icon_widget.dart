@@ -48,7 +48,8 @@ class SDGIconWidget extends StatelessWidget {
       child: SDGIconService.instance.getSDGIconWidget(
         sdgNumber: sdgNumber,
         size: size,
-        color: isSelected ? Colors.white : null,
+        // Don't change the color when selected, as it makes the icon disappear
+        color: null,
       ),
     );
   }

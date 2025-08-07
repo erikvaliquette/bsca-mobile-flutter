@@ -97,6 +97,11 @@ class SubscriptionModel {
     if (currentPeriodEnd == null) return false;
     return DateTime.now().isAfter(currentPeriodEnd!);
   }
+  
+  /// Check if subscription should display as expired in UI
+  bool get shouldDisplayAsExpired {
+    return !isActive && isExpired;
+  }
 
   /// Get days until expiration (null if free tier or no expiration)
   int? get daysUntilExpiration {

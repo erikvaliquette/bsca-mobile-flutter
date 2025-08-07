@@ -76,6 +76,28 @@ class ActionProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+  
+  /// Load all actions for an organization
+  Future<void> loadOrganizationActions(String organizationId) async {
+    _setLoading(true);
+    _setError(null);
+
+    try {
+      final actions = await ActionService.getOrganizationActions(organizationId);
+      _actions = actions;
+      
+      // Load organization statistics if needed
+      // final stats = await ActionService.getOrganizationActionStatistics(organizationId);
+      // _statistics = stats;
+      
+      _setLoading(false);
+      notifyListeners();
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      notifyListeners();
+    }
+  }
 
   /// Create a new action
   Future<ActionItem?> createAction({

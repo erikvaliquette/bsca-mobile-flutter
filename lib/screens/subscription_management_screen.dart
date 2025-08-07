@@ -23,7 +23,21 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
     final subscription = subscriptionProvider.subscription;
     final currentTier = subscriptionProvider.currentServiceLevel;
     final isActive = subscriptionProvider.hasActiveSubscription;
+    final isExpired = subscriptionProvider.isSubscriptionExpired;
+    final shouldDisplayAsExpired = subscriptionProvider.shouldDisplayAsExpired;
     final displayInfo = subscriptionProvider.displayInfo;
+    
+    // Comprehensive debug information
+    print('===== SUBSCRIPTION DEBUG INFO =====');
+    print('Subscription: ${subscription?.toString()}');
+    print('Current tier: ${currentTier.name}');
+    print('Is active: $isActive');
+    print('Is expired: $isExpired');
+    print('Should display as expired: $shouldDisplayAsExpired');
+    print('Current period end: ${subscription?.currentPeriodEnd}');
+    print('Status: ${subscription?.status}');
+    print('Display info: $displayInfo');
+    print('===================================');
     
     return Scaffold(
       appBar: AppBar(
@@ -43,7 +57,7 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildCurrentSubscriptionCard(context, subscription, currentTier, isActive),
+                _buildCurrentSubscriptionCard(context, subscription, currentTier, isActive, shouldDisplayAsExpired),
                 const SizedBox(height: 24),
                 _buildSubscriptionTiersSection(context, currentTier),
                 const SizedBox(height: 24),
@@ -70,15 +84,47 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
     SubscriptionModel? subscription, 
     ServiceLevel currentTier,
     bool isActive,
+    bool showAsExpired,
   ) {
+    // Determine the appropriate status label and color based on subscription state
+    String statusLabel;
+    Color statusColor;
+    String dateMessage;
+    
+    if (isActive) {
+      statusLabel = 'ACTIVE';
+      statusColor = Colors.green;
+      dateMessage = subscription?.currentPeriodEnd != null 
+          ? 'Will renew on: ${_formatDate(subscription!.currentPeriodEnd!)}' 
+          : '';
+    } else if (subscription?.isExpired == true) {
+      statusLabel = 'EXPIRED';
+      statusColor = Theme.of(context).colorScheme.error;
+      dateMessage = subscription?.currentPeriodEnd != null 
+          ? 'Expired on: ${_formatDate(subscription!.currentPeriodEnd!)}' 
+          : 'Subscription expired';
+    } else {
+      statusLabel = 'INACTIVE';
+      statusColor = Colors.orange;
+      dateMessage = subscription?.currentPeriodEnd != null 
+          ? 'Valid until: ${_formatDate(subscription!.currentPeriodEnd!)}' 
+          : 'Subscription inactive';
+    }
+    
+    // Debug information
+    print('Status label: $statusLabel');
+    print('Date message: $dateMessage');
+    print('Subscription status: ${subscription?.status}');
+    print('Current period end: ${subscription?.currentPeriodEnd}');
+    print('Is active: $isActive');
+    print('Is expired: ${subscription?.isExpired}');
+    
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isActive 
-            ? Theme.of(context).colorScheme.primary 
-            : Theme.of(context).colorScheme.error,
+          color: statusColor,
           width: 2,
         ),
       ),
@@ -96,17 +142,13 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
                 ),
                 Chip(
                   label: Text(
-                    isActive ? 'ACTIVE' : 'INACTIVE',
-                    style: TextStyle(
+                    statusLabel,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  backgroundColor: isActive 
-                    ? Colors.green 
-                    : subscription?.isExpired == true 
-                      ? Theme.of(context).colorScheme.error 
-                      : Colors.orange,
+                  backgroundColor: statusColor,
                 ),
               ],
             ),
@@ -119,9 +161,9 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
               ),
             ),
             const SizedBox(height: 16),
-            if (subscription != null && subscription.currentPeriodEnd != null && currentTier != ServiceLevel.free)
+            if (dateMessage.isNotEmpty && currentTier != ServiceLevel.free)
               Text(
-                isActive ? 'Will renew on: ${_formatDate(subscription.currentPeriodEnd!)}' : 'Expired on: ${_formatDate(subscription.currentPeriodEnd!)}',
+                dateMessage,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             if (subscription?.isExpiringSoon() == true && isActive)

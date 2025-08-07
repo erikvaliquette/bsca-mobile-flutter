@@ -352,7 +352,20 @@ class OrganizationService {
         return null;
       }
       
-      return _mapToOrganization(response);
+      // Get SDG focus areas from the organization_sdgs junction table
+      final sdgResponse = await _client
+          .from('organization_sdgs')
+          .select('sdg_id')
+          .eq('organization_id', organizationId);
+      
+      List<String>? sdgFocusAreas;
+      if (sdgResponse != null && sdgResponse.isNotEmpty) {
+        sdgFocusAreas = sdgResponse.map<String>((item) => item['sdg_id'].toString()).toList();
+        debugPrint('Loaded ${sdgFocusAreas.length} SDG focus areas for organization $organizationId');
+      }
+      
+      final organization = _mapToOrganization(response);
+      return organization.copyWith(sdgFocusAreas: sdgFocusAreas);
     } catch (e) {
       debugPrint('Error getting organization by ID: $e');
       return null;

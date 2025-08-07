@@ -76,6 +76,24 @@ class SdgTargetService {
       return [];
     }
   }
+  
+  Future<List<SdgTarget>> getTargetsByOrganizationAndSDG(String organizationId, int sdgId) async {
+    try {
+      final response = await SupabaseService.client
+          .from(_tableName)
+          .select()
+          .eq('organization_id', organizationId)
+          .eq('sdg_id', sdgId)
+          .order('target_number', ascending: true);
+
+      return (response as List)
+          .map((data) => SdgTarget.fromJson(data))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching organization SDG targets for SDG $sdgId: $e');
+      return [];
+    }
+  }
 
   Future<SdgTarget?> getTargetById(String id) async {
     try {

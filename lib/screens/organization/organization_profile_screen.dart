@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bsca_mobile_flutter/models/organization_model.dart';
 import 'package:bsca_mobile_flutter/models/organization_membership_model.dart';
+import 'package:bsca_mobile_flutter/models/sdg_goal.dart';
 import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
+import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
+import 'package:bsca_mobile_flutter/providers/organization_sdg_provider.dart';
 import 'package:bsca_mobile_flutter/services/organization_service.dart';
+import 'package:bsca_mobile_flutter/services/organization_sdg_service.dart';
 import 'package:bsca_mobile_flutter/services/validation_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:bsca_mobile_flutter/screens/organization/carbon_footprint_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/team_members_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/activities_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/validation_requests_screen.dart';
+import 'package:bsca_mobile_flutter/screens/organization/organization_sdg_selection_screen.dart';
+import 'package:bsca_mobile_flutter/screens/sdg/sdg_targets_screen.dart';
 import 'package:bsca_mobile_flutter/screens/carbon_calculator/carbon_calculator_screen.dart';
+import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
 import 'package:intl/intl.dart';
 import 'package:bsca_mobile_flutter/services/organization_carbon_footprint_service.dart';
 import 'package:bsca_mobile_flutter/models/organization_carbon_footprint_model.dart';
@@ -31,14 +38,206 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
   // Add keys to force FutureBuilder refresh
   Key _teamMembersKey = UniqueKey();
   Key _validationStatsKey = UniqueKey();
+  Key _sdgFocusAreasKey = UniqueKey();
+  bool _isAdmin = false;
+  bool _isEditMode = false; // Toggle for SDG edit mode
+  late Organization _organization;
   
-  void _refreshData() {
+  void _refreshData() async {
     setState(() {
       _teamMembersKey = UniqueKey();
       _validationStatsKey = UniqueKey();
+      _sdgFocusAreasKey = UniqueKey();
+    });
+    _checkAdminStatus();
+    await _reloadOrganization();
+  }
+  
+  Future<void> _reloadOrganization() async {
+    debugPrint('Reloading organization data for ${widget.organization.id}');
+    final updatedOrg = await OrganizationService.instance.getOrganizationById(widget.organization.id);
+    if (updatedOrg != null && mounted) {
+      setState(() {
+        _organization = updatedOrg;
+        debugPrint('Organization reloaded with ${updatedOrg.sdgFocusAreas?.length ?? 0} SDG focus areas');
+      });
+    }
+  }
+  
+  @override
+  void initState() {
+    super.initState();
+    _organization = widget.organization;
+    _checkAdminStatus();
+    _initializeOrganizationSdgProvider();
+    _reloadOrganization(); // Load the latest data including SDG focus areas
+  }
+  
+  // Initialize the organization SDG provider
+  Future<void> _initializeOrganizationSdgProvider() async {
+    // Use addPostFrameCallback to access context safely after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_organization.id.isNotEmpty) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final userId = authProvider.user?.id;
+        if (userId != null) {
+          try {
+            final organizationSdgProvider = Provider.of<OrganizationSdgProvider>(context, listen: false);
+            await organizationSdgProvider.init(_organization.id, userId);
+          } catch (e) {
+            debugPrint('Error initializing organization SDG provider: $e');
+          }
+        }
+      }
     });
   }
+  
+  Future<void> _checkAdminStatus() async {
+    final userId = Provider.of<AuthProvider>(context, listen: false).user?.id;
+    if (userId != null) {
+      debugPrint('Checking admin status for user $userId in organization ${widget.organization.id}');
+      final isAdmin = await OrganizationSdgService.instance.isUserOrganizationAdmin(
+        userId, 
+        widget.organization.id
+      );
+      debugPrint('Admin check result: $isAdmin');
+      if (mounted) {
+        setState(() {
+          _isAdmin = isAdmin;
+          debugPrint('_isAdmin set to: $_isAdmin');
+        });
+      }
+    } else {
+      debugPrint('No user ID available for admin check');
+    }
+  }
 
+  // Helper method to build SDG icons in view mode
+  List<Widget> _buildViewModeSDGs() {
+    // Get the organization SDG provider
+    final organizationSdgProvider = Provider.of<OrganizationSdgProvider>(context, listen: true);
+    
+    // Get selected SDG IDs from the provider
+    final selectedSdgIds = organizationSdgProvider.selectedSdgIds;
+    
+    if (selectedSdgIds.isEmpty) {
+      return [const Text('No SDG focus areas selected')];
+    }
+    
+    return selectedSdgIds.map((sdgId) {
+      // Convert string ID to int
+      final id = int.tryParse(sdgId);
+      if (id == null) return const SizedBox.shrink();
+      
+      // Find the SDG goal by ID
+      final sdg = SDGGoal.allGoals.firstWhere(
+        (goal) => goal.id == id,
+        orElse: () => SDGGoal(
+          id: id, 
+          name: 'Unknown SDG', 
+          color: Colors.grey,
+          iconPath: 'assets/images/sdg/placeholder.png',
+        ),
+      );
+      
+      return InkWell(
+        onTap: () {
+          // Navigate to SDG targets screen for this organization's SDG
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SdgTargetsScreen(
+                sdg: sdg,
+                organizationId: _organization.id,
+              ),
+            ),
+          );
+        },
+        child: Tooltip(
+          message: sdg.name,
+          child: SDGIconWidget(
+            sdgNumber: sdg.id,
+            size: 60,
+            showLabel: false,
+          ),
+        ),
+      );
+    }).toList();
+  }
+  
+  // Helper method to build SDG icons in edit mode
+  List<Widget> _buildEditModeSDGs() {
+    // Get the organization SDG provider
+    final organizationSdgProvider = Provider.of<OrganizationSdgProvider>(context, listen: true);
+    
+    // Create a list of all SDGs
+    return SDGGoal.allGoals.map((sdg) {
+      // Check if this SDG is selected using the provider
+      final isSelected = organizationSdgProvider.isSdgSelected(sdg.id);
+      
+      return InkWell(
+        onTap: () {
+          if (!_isAdmin) return; // Only admins can toggle
+          
+          // Toggle this SDG
+          _toggleSDG(sdg.id.toString());
+        },
+        child: Stack(
+          children: [
+            Opacity(
+              opacity: isSelected ? 1.0 : 0.5,
+              child: Tooltip(
+                message: sdg.name,
+                child: SDGIconWidget(
+                  sdgNumber: sdg.id,
+                  size: 60,
+                  showLabel: false,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+  
+  // Helper method to toggle an SDG selection
+  void _toggleSDG(String sdgId) async {
+    if (!_isAdmin) return; // Only admins can toggle
+    
+    try {
+      // Get the organization SDG provider
+      final organizationSdgProvider = Provider.of<OrganizationSdgProvider>(context, listen: false);
+      
+      // Toggle the SDG using the provider - this will update the UI automatically
+      // since we're using listen: true in the build methods
+      await organizationSdgProvider.toggleSdg(int.parse(sdgId));
+      
+      // Refresh the organization data to keep everything in sync
+      await _reloadOrganization();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating SDG focus areas: $e')),
+      );
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -172,31 +371,62 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
 
   Widget _buildSDGSection(BuildContext context) {
     return Card(
+      key: _sdgFocusAreasKey,
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'SDG Focus Areas',
-              style: Theme.of(context).textTheme.titleLarge,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'SDG Focus Areas',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (_isAdmin)
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    tooltip: 'Edit SDG Focus Areas',
+                    onPressed: () {
+                      // Toggle between edit mode and view mode
+                      setState(() {
+                        _isEditMode = !_isEditMode;
+                      });
+                      
+                      // If we're exiting edit mode, refresh the data
+                      if (!_isEditMode) {
+                        _refreshData();
+                      }
+                    },
+                  ),
+              ],
             ),
+            if (_isAdmin && _isEditMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Tap on SDGs to select or deselect them',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
-            if (widget.organization.sdgFocusAreas != null &&
-                widget.organization.sdgFocusAreas!.isNotEmpty)
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 8.0,
-                children: widget.organization.sdgFocusAreas!.map((sdg) {
-                  return Chip(
-                    label: Text(sdg),
-                    backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                  );
-                }).toList(),
-              )
-            else
-              const Text('No SDG focus areas specified'),
+            // SDG focus areas display
+            Consumer<OrganizationSdgProvider>(
+              builder: (context, organizationSdgProvider, _) {
+                return Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: _isEditMode
+                      ? _buildEditModeSDGs()
+                      : _buildViewModeSDGs(),
+                );
+              },
+            ),
           ],
         ),
       ),
