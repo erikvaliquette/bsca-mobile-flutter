@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:bsca_mobile_flutter/models/sdg_target.dart';
-import 'package:bsca_mobile_flutter/models/action_item.dart';
-import 'package:bsca_mobile_flutter/models/action_activity.dart';
-import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
-import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
-import 'package:bsca_mobile_flutter/providers/action_provider.dart';
-import 'package:bsca_mobile_flutter/services/action_activity_service.dart';
-import 'package:bsca_mobile_flutter/services/action_attribution_service.dart';
-import 'package:bsca_mobile_flutter/widgets/organization_attribution_widget.dart';
 import 'package:uuid/uuid.dart';
+import 'package:bsca_mobile_flutter/models/action_activity.dart';
+import 'package:bsca_mobile_flutter/models/sdg_target.dart';
+import 'package:bsca_mobile_flutter/providers/action_provider.dart';
+import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
+import 'package:bsca_mobile_flutter/services/action_activity_service.dart';
 
 class AddActionScreen extends StatefulWidget {
   final int sdgId;
@@ -43,7 +39,6 @@ class _AddActionScreenState extends State<AddActionScreen> {
   String _selectedCategory = 'reduction';
   String _selectedPriority = 'medium';
   DateTime? _selectedDueDate;
-  String? _selectedOrganizationId;
   bool _createInitialActivity = false;
   bool _isLoading = false;
 
@@ -309,15 +304,42 @@ class _AddActionScreenState extends State<AddActionScreen> {
           onTap: _selectDueDate,
         ),
         const SizedBox(height: 16),
-        OrganizationAttributionWidget(
-          currentOrganizationId: _selectedOrganizationId,
-          onOrganizationSelected: (organizationId) {
-            setState(() {
-              _selectedOrganizationId = organizationId;
-            });
-          },
-          attributionType: 'action',
-          helpText: 'Choose whether this action is personal or should be attributed to an organization.',
+        // Attribution is now inherited from the parent Target
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Attribution Inherited from Target',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'This action will inherit its organization attribution from the selected SDG Target. Attribution is managed at the Target level.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -512,7 +534,7 @@ class _AddActionScreenState extends State<AddActionScreen> {
         throw Exception('User not authenticated');
       }
 
-      // Create the action using ActionProvider's named parameters
+      // Create the action using ActionProvider
       final createdAction = await actionProvider.createAction(
         userId: userId,
         sdgId: widget.sdgId,
@@ -520,7 +542,7 @@ class _AddActionScreenState extends State<AddActionScreen> {
         description: _descriptionController.text.trim(),
         category: _selectedCategory,
         priority: _selectedPriority,
-        organizationId: _selectedOrganizationId,
+        organizationId: null, // Attribution inherited from parent target
         sdgTargetId: widget.target?.id,
         dueDate: _selectedDueDate,
       );
@@ -529,23 +551,8 @@ class _AddActionScreenState extends State<AddActionScreen> {
         throw Exception('Failed to create action');
       }
 
-      // Handle organization attribution if selected
-      if (_selectedOrganizationId != null) {
-        final impactValue = _createInitialActivity && _impactValueController.text.isNotEmpty
-            ? double.tryParse(_impactValueController.text)
-            : null;
-        final impactUnit = _createInitialActivity && _impactUnitController.text.isNotEmpty
-            ? _impactUnitController.text
-            : null;
-            
-        await ActionAttributionService.instance.createActionOrganizationAttribution(
-          createdAction.id,
-          _selectedOrganizationId!,
-          userId,
-          impactValue: impactValue,
-          impactUnit: impactUnit,
-        );
-      }
+      // Attribution is now handled automatically through target-level cascading
+      // Actions inherit attribution from their parent SDG Target
 
       // Create initial activity if requested
       if (_createInitialActivity && _activityTitleController.text.trim().isNotEmpty) {
@@ -557,7 +564,7 @@ class _AddActionScreenState extends State<AddActionScreen> {
           title: _activityTitleController.text.trim(),
           description: _activityDescriptionController.text.trim(),
           userId: userId,
-          organizationId: _selectedOrganizationId,
+          organizationId: null, // Attribution inherited from parent target
           createdAt: now,
           updatedAt: now,
           impactValue: _impactValueController.text.isNotEmpty

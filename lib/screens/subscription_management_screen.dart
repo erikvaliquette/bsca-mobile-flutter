@@ -104,7 +104,9 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
                   ),
                   backgroundColor: isActive 
                     ? Colors.green 
-                    : Theme.of(context).colorScheme.error,
+                    : subscription?.isExpired == true 
+                      ? Theme.of(context).colorScheme.error 
+                      : Colors.orange,
                 ),
               ],
             ),
@@ -119,16 +121,16 @@ class _SubscriptionManagementScreenState extends State<SubscriptionManagementScr
             const SizedBox(height: 16),
             if (subscription != null && subscription.currentPeriodEnd != null && currentTier != ServiceLevel.free)
               Text(
-                'Expires: ${_formatDate(subscription.currentPeriodEnd!)}',
+                isActive ? 'Will renew on: ${_formatDate(subscription.currentPeriodEnd!)}' : 'Expired on: ${_formatDate(subscription.currentPeriodEnd!)}',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
-            if (subscription?.isExpiringSoon() == true)
+            if (subscription?.isExpiringSoon() == true && isActive)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
-                  'Your subscription will expire soon!',
+                  'Renewal scheduled soon',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
+                    color: Theme.of(context).colorScheme.tertiary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

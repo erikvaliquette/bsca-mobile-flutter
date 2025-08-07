@@ -34,6 +34,54 @@ class HelpSupportScreen extends StatelessWidget {
             'Sustainable Development Goals (SDGs) are 17 global goals set by the United Nations to achieve a better and more sustainable future for all. You can explore and contribute to these goals through our platform.',
           ),
           _buildFAQItem(
+            'What are SDG Targets?',
+            'SDG Targets are specific, measurable goals that help you work towards the broader Sustainable Development Goals. Each target represents a concrete objective you want to achieve, like "Reduce energy consumption by 20%" or "Plant 100 trees this year". Targets are the foundation of your sustainability work and control the attribution for all related Actions and Activities.',
+          ),
+          _buildFAQItem(
+            'What are Actions?',
+            'Actions are the specific steps you take to achieve your SDG targets. For example, if your target is to reduce energy consumption, your actions might include "Switch to LED bulbs" or "Install a programmable thermostat". Actions automatically inherit their organization attribution from their parent SDG Target.',
+          ),
+          _buildFAQItem(
+            'What are Activities?',
+            'Activities are the individual tasks or milestones within an Action. They help you break down larger actions into manageable steps and track detailed progress. Activities automatically inherit their organization attribution from their parent SDG Target, ensuring consistent attribution throughout your sustainability work.',
+          ),
+          _buildFAQItem(
+            'How does organization attribution work?',
+            'With a Professional+ subscription, you can attribute your SDG Targets to organizations you\'re a member of. When you attribute a Target to an organization, ALL associated Actions and Activities automatically inherit the same attribution. This cascading system ensures consistency and makes it easy to manage organizational impact tracking.',
+          ),
+          _buildFAQItem(
+            'Where do I manage organization attribution?',
+            'Organization attribution is managed at the SDG Target level. When you create or edit a Target, you can choose whether it\'s personal or should be attributed to an organization. All Actions and Activities under that Target will automatically inherit the same attribution - you don\'t need to set it separately for each item.',
+          ),
+          _buildFAQItem(
+            'Can I change attribution after creating a Target?',
+            'Yes! You can change the organization attribution of any SDG Target you own. When you change a Target\'s attribution, all associated Actions and Activities automatically update to match the new attribution. This cascading update ensures your entire sustainability hierarchy stays consistent.',
+          ),
+          _buildFAQItem(
+            'What happens when I change a Target\'s attribution?',
+            'When you change a Target\'s organization attribution, the system automatically updates all related Actions and Activities to match. Organization impact metrics are recalculated in real-time, and the changes are reflected immediately in organizational dashboards. This ensures accurate tracking of collective sustainability efforts.',
+          ),
+          _buildFAQItem(
+            'What\'s the difference between personal and organizational Targets?',
+            'Personal Targets count towards your individual sustainability goals and appear in your personal dashboard. Organizational Targets contribute to your organization\'s collective impact metrics and help demonstrate your company\'s sustainability efforts. All Actions and Activities under a Target inherit its attribution type.',
+          ),
+          _buildFAQItem(
+            'Why can\'t I attribute Actions or Activities directly to organizations?',
+            'To ensure consistency and simplify management, attribution is controlled at the SDG Target level. This prevents confusion and ensures that all related work (Actions and Activities) under a Target has the same attribution. This hierarchical approach makes it easier to manage organizational impact and prevents attribution conflicts.',
+          ),
+          _buildFAQItem(
+            'What subscription level do I need for organization attribution?',
+            'Organization attribution requires a Professional+ subscription. With this subscription, you can attribute your SDG Targets to organizations you\'re a member of, and all associated Actions and Activities will automatically inherit this attribution. Free users can only create personal Targets, Actions, and Activities.',
+          ),
+          _buildFAQItem(
+            'How do organizations track their collective impact?',
+            'When members attribute their SDG Targets to an organization, the system automatically tracks collective metrics including total Targets, Actions, and Activities. Organization dashboards show real-time impact metrics that update automatically when members change their Target attributions. This provides accurate organizational sustainability reporting.',
+          ),
+          _buildFAQItem(
+            'Can I see which organization a Target is attributed to?',
+            'Yes! When viewing any Target, Action, or Activity, you can see its current attribution status. Personal items show as "Personal" while organizational items display the organization name. The attribution information is clearly visible throughout the app to help you understand how your work contributes to organizational goals.',
+          ),
+          _buildFAQItem(
             'How is my carbon footprint calculated?',
             'We use industry-standard emission factors based on your transportation mode, fuel type, and distance traveled. Different activities have different emission rates per kilometer.',
           ),

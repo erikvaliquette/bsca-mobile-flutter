@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target.dart';
 import 'package:bsca_mobile_flutter/services/sdg_target_service.dart';
 import 'package:bsca_mobile_flutter/services/supabase/supabase_client.dart';
+import 'package:bsca_mobile_flutter/services/target_cascading_attribution_service.dart';
 
 class SdgTargetProvider with ChangeNotifier {
   final SdgTargetService _targetService;
@@ -145,9 +146,31 @@ class SdgTargetProvider with ChangeNotifier {
   /// Update an existing SDG target
   Future<SdgTarget?> updateTarget(SdgTarget target) async {
     try {
+      // Get the old target to compare organization attribution
+      final oldTarget = _targets.where((t) => t.id == target.id).firstOrNull;
+      final oldOrganizationId = oldTarget?.organizationId;
+      final newOrganizationId = target.organizationId;
+      
       final updatedTarget = await _targetService.updateTarget(target);
       
       if (updatedTarget != null) {
+        // Handle cascading attribution if organization changed
+        if (oldOrganizationId != newOrganizationId) {
+          debugPrint('🎯 Target organization attribution changed - triggering cascade');
+          debugPrint('   Old Org: $oldOrganizationId');
+          debugPrint('   New Org: $newOrganizationId');
+          
+          // Use the target's userId as attributedBy, or fallback to a default
+          final attributedBy = updatedTarget.userId ?? 'system';
+          
+          await TargetCascadingAttributionService.instance().handleTargetAttributionChange(
+            targetId: updatedTarget.id,
+            oldOrganizationId: oldOrganizationId,
+            newOrganizationId: newOrganizationId,
+            attributedBy: attributedBy,
+          );
+        }
+        
         // Update in the main list
         final index = _targets.indexWhere((t) => t.id == target.id);
         if (index != -1) {

@@ -73,15 +73,6 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(builder: (context) => const ProfileScreen()),
             ),
           ),
-
-          MoreMenuItem(
-            title: 'My Travel Emissions',
-            icon: Icons.analytics,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const MyTravelEmissionsScreen()),
-            ),
-          ),
           
           // Only show Organization menu item for paid tiers
           if (serviceLevel != ServiceLevel.free)
@@ -116,6 +107,33 @@ class _MoreScreenState extends State<MoreScreen> {
                 );
               },
             ),
+
+          MoreMenuItem(
+            title: 'My Travel Emissions',
+            icon: Icons.analytics,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MyTravelEmissionsScreen()),
+            ),
+          ),
+          
+          MoreMenuItem(
+            title: 'Carbon Calculator',
+            icon: Icons.calculate,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CarbonCalculatorScreen()),
+            ),
+          ),
+          
+          MoreMenuItem(
+            title: 'SDG Goals & Targets',
+            icon: Icons.track_changes,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SdgGoalsScreen()),
+            ),
+          ),
           
           MoreMenuItem(
             title: 'SDG Marketplace',
@@ -125,22 +143,7 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(builder: (context) => const SDGMarketplaceScreen()),
             ),
           ),
-          MoreMenuItem(
-            title: 'SDG Goals & Targets',
-            icon: Icons.track_changes,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SdgGoalsScreen()),
-            ),
-          ),
-          MoreMenuItem(
-            title: 'Carbon Calculator',
-            icon: Icons.calculate,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CarbonCalculatorScreen()),
-            ),
-          ),
+          
           MoreMenuItem(
             title: 'Solutions',
             icon: Icons.lightbulb,
@@ -149,6 +152,16 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(builder: (context) => const SolutionsScreen()),
             ),
           ),
+          
+          MoreMenuItem(
+            title: 'Subscription Management',
+            icon: Icons.card_membership,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SubscriptionManagementScreen()),
+            ),
+          ),
+          
           MoreMenuItem(
             title: 'Help & Support',
             icon: Icons.help_outline,
@@ -157,20 +170,13 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
             ),
           ),
+          
           MoreMenuItem(
             title: 'About',
             icon: Icons.info_outline,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AboutScreen()),
-            ),
-          ),
-          MoreMenuItem(
-            title: 'Subscription Management',
-            icon: Icons.card_membership,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SubscriptionManagementScreen()),
             ),
           ),
           // Notification Test button removed as notifications are now working properly

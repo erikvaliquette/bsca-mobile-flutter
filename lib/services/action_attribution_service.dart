@@ -69,6 +69,9 @@ class ActionAttributionService {
         await OrganizationImpactMetricsService.instance.updateTotalImpact(organizationId, impactValue, impactUnit ?? 'mixed');
       }
       
+      // CASCADE: Automatically attribute all activities under this action
+      await _cascadeAttributionToActivities(actionId, organizationId, attributedBy);
+      
       return true;
     } catch (e) {
       debugPrint('❌ Error creating Action attribution: $e');
@@ -113,6 +116,9 @@ class ActionAttributionService {
       }
       
       debugPrint('✅ Action attribution deactivated: $result');
+      
+      // CASCADE: Automatically deactivate all activities under this action
+      await _cascadeDeactivationToActivities(actionId, organizationId);
       
       // Update organization impact metrics
       await OrganizationImpactMetricsService.instance.updateActionCount(organizationId, -1);
@@ -250,6 +256,105 @@ class ActionAttributionService {
     } catch (e) {
       debugPrint('❌ Error checking user attribution permissions: $e');
       return false;
+    }
+  }
+  
+  /// CASCADE HELPER: Automatically attribute all activities under an action to the same organization
+  Future<void> _cascadeAttributionToActivities(String actionId, String organizationId, String attributedBy) async {
+    try {
+      debugPrint('🔄 Cascading attribution to activities for action $actionId');
+      
+      // Get all activities for this action
+      final activities = await _client
+          .from('action_activities')
+          .select('id')
+          .eq('action_id', actionId);
+      
+      if (activities.isEmpty) {
+        debugPrint('ℹ️ No activities found for action $actionId - no cascading needed');
+        return;
+      }
+      
+      debugPrint('📋 Found ${activities.length} activities to cascade attribution to');
+      
+      // Create attribution records for all activities
+      for (final activity in activities) {
+        final activityId = activity['id'] as String;
+        
+        // Check if attribution already exists
+        final existingAttribution = await _client
+            .from('activity_organization_attribution')
+            .select('id')
+            .eq('activity_id', activityId)
+            .eq('organization_id', organizationId)
+            .eq('is_active', true)
+            .maybeSingle();
+        
+        if (existingAttribution == null) {
+          // Create new activity attribution
+          await _client
+              .from('activity_organization_attribution')
+              .insert({
+                'activity_id': activityId,
+                'organization_id': organizationId,
+                'attributed_by': attributedBy,
+                'attribution_date': DateTime.now().toIso8601String(),
+                'is_active': true,
+              });
+          
+          debugPrint('✅ Activity $activityId attributed to organization $organizationId');
+        } else {
+          debugPrint('ℹ️ Activity $activityId already attributed to organization $organizationId');
+        }
+      }
+      
+      // Update activity count in organization metrics
+      await OrganizationImpactMetricsService.instance.updateActivityCount(organizationId, activities.length);
+      
+      debugPrint('✅ Cascaded attribution to ${activities.length} activities');
+    } catch (e) {
+      debugPrint('❌ Error cascading attribution to activities: $e');
+    }
+  }
+  
+  /// CASCADE HELPER: Automatically deactivate all activity attributions when action attribution is deactivated
+  Future<void> _cascadeDeactivationToActivities(String actionId, String organizationId) async {
+    try {
+      debugPrint('🔄 Cascading deactivation to activities for action $actionId');
+      
+      // First, get all activity IDs for this action
+      final activities = await _client
+          .from('action_activities')
+          .select('id')
+          .eq('action_id', actionId);
+      
+      if (activities.isEmpty) {
+        debugPrint('ℹ️ No activities found for action $actionId - no cascading deactivation needed');
+        return;
+      }
+      
+      final activityIds = activities.map((a) => a['id'] as String).toList();
+      
+      // Deactivate attributions for these activities
+      final result = await _client
+          .from('activity_organization_attribution')
+          .update({'is_active': false})
+          .eq('organization_id', organizationId)
+          .inFilter('activity_id', activityIds)
+          .eq('is_active', true)
+          .select();
+      
+      final deactivatedCount = result.length;
+      
+      if (deactivatedCount > 0) {
+        // Update activity count in organization metrics
+        await OrganizationImpactMetricsService.instance.updateActivityCount(organizationId, -deactivatedCount);
+        debugPrint('✅ Deactivated attribution for $deactivatedCount activities');
+      } else {
+        debugPrint('ℹ️ No active activity attributions found to deactivate');
+      }
+    } catch (e) {
+      debugPrint('❌ Error cascading deactivation to activities: $e');
     }
   }
 }

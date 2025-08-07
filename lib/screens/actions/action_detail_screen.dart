@@ -1,18 +1,22 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:bsca_mobile_flutter/models/action_item.dart';
 import 'package:bsca_mobile_flutter/models/action_measurement.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target.dart';
 import 'package:bsca_mobile_flutter/models/sdg_target_data.dart';
-import 'package:bsca_mobile_flutter/models/action_attribution_model.dart';
-import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
+import 'package:bsca_mobile_flutter/providers/action_provider.dart';
+import 'package:bsca_mobile_flutter/providers/auth_provider.dart';
 import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
-import 'package:bsca_mobile_flutter/services/action_target_integration_service.dart';
+import 'package:bsca_mobile_flutter/providers/sdg_target_provider.dart';
 import 'package:bsca_mobile_flutter/services/action_attribution_service.dart';
+import 'package:bsca_mobile_flutter/services/action_target_integration_service.dart';
 import 'package:bsca_mobile_flutter/services/sdg_target_data_service.dart';
 import 'package:bsca_mobile_flutter/services/sdg_target_service.dart';
 import 'package:bsca_mobile_flutter/services/supabase/supabase_client.dart';
 import 'package:bsca_mobile_flutter/widgets/organization_attribution_widget.dart';
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -28,12 +32,10 @@ class ActionDetailScreen extends StatefulWidget {
 class _ActionDetailScreenState extends State<ActionDetailScreen> {
   late ActionTargetIntegrationService _integrationService;
   late ActionItem _action;
-  List<SdgTargetData> _targetData = [];
-  List<ActionAttributionModel> _attributions = [];
+  SdgTargetData? _targetData;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
-  bool _showAttributionEdit = false;
 
   final TextEditingController _measurementController = TextEditingController();
   final TextEditingController _baselineController = TextEditingController();
@@ -60,25 +62,17 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
     });
 
     try {
-      // Load target data and attribution data in parallel
-      final futures = <Future>[];
-      
       // Load target data if this action is linked to an SDG target
       if (_action.sdgTargetId != null) {
-        futures.add(_integrationService.getTargetDataForAction(_action));
+        final targetDataList = await _integrationService.getTargetDataForAction(_action);
+        setState(() {
+          _targetData = targetDataList.isNotEmpty ? targetDataList.first : null;
+        });
       } else {
-        futures.add(Future.value(<SdgTargetData>[]));
+        setState(() {
+          _targetData = null;
+        });
       }
-      
-      // Load attribution data for this action
-      futures.add(ActionAttributionService.instance.getActionAttributions(_action.id));
-      
-      final results = await Future.wait(futures);
-      
-      setState(() {
-        _targetData = results[0] as List<SdgTargetData>;
-        _attributions = results[1] as List<ActionAttributionModel>;
-      });
       
       // Set initial values for controllers
       if (_action.baselineValue != null) {
@@ -892,29 +886,15 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Attribution',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                if (_attributions.isNotEmpty)
-                  IconButton(
-                    icon: Icon(_showAttributionEdit ? Icons.close : Icons.edit),
-                    onPressed: () {
-                      setState(() {
-                        _showAttributionEdit = !_showAttributionEdit;
-                      });
-                    },
-                    tooltip: _showAttributionEdit ? 'Cancel Edit' : 'Edit Attribution',
-                  ),
-              ],
+            Text(
+              'Attribution',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
             
-            if (_attributions.isEmpty) ..[
-              // No attribution - personal action
+            // Show inherited attribution from parent Target
+            if (_targetData?.target?.organizationId == null) ..[
+              // No attribution - personal action (inherited from target)
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -938,7 +918,7 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
                             ),
                           ),
                           Text(
-                            'This action is not attributed to any organization',
+                            'Attribution inherited from Target: Personal',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -950,89 +930,98 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
                   ],
                 ),
               ),
-            ] else ..[
-              // Has attribution - show organization info
-              for (final attribution in _attributions.where((a) => a.isActive)) ..[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.business, color: Colors.green[600]),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              attribution.organization?['name'] ?? 'Organization',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green[800],
-                              ),
-                            ),
-                            if (attribution.organization?['description'] != null)
+            ] else ..[              // Has organizational attribution - show inherited from target
+              FutureBuilder<Map<String, dynamic>?>(
+                future: _getOrganizationInfo(_targetData!.target!.organizationId!),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      child: const CircularProgressIndicator(),
+                    );
+                  }
+                  
+                  final orgInfo = snapshot.data;
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.business, color: Colors.green[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                attribution.organization!['description'],
+                                orgInfo?['name'] ?? 'Organization',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[600],
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[800],
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
+                              if (orgInfo?['description'] != null)
                                 Text(
-                                  'Attributed: ',
+                                  orgInfo!['description'],
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.green[600],
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Text(
-                                  DateFormat('MMM d, yyyy').format(attribution.attributionDate),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (attribution.impactValue != null) ..[
                               const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.trending_up, size: 16, color: Colors.green[600]),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Impact: ${attribution.impactValue} ${attribution.impactUnit ?? ''}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green[700],
-                                    ),
-                                  ),
-                                ],
+                              Text(
+                                'Attribution inherited from Target',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.green[600],
+                                ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
             
-            // Attribution edit section
-            if (_showAttributionEdit) ..[
+            // Note: Attribution is managed at the Target level
+            // Actions inherit attribution from their parent Target
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.blue[600]),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Attribution is managed at the Target level and inherited by all Actions and Activities.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Remove old attribution edit section
+            if (false) ..[
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
@@ -1058,53 +1047,21 @@ class _ActionDetailScreenState extends State<ActionDetailScreen> {
     );
   }
 
-  Future<void> _handleAttributionChange(String? newOrganizationId) async {
+  // Attribution is now managed at the Target level
+  // This method is no longer needed since actions inherit attribution from their parent target
+
+  /// Get organization information for display
+  Future<Map<String, dynamic>?> _getOrganizationInfo(String organizationId) async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final currentAttribution = _attributions.isNotEmpty ? _attributions.first : null;
-      final oldOrganizationId = currentAttribution?.organizationId;
-      
-      // Use the reattribution logic from ActionAttributionService
-      await ActionAttributionService.instance.handleActionReattribution(
-        actionId: _action.id,
-        oldOrganizationId: oldOrganizationId,
-        newOrganizationId: newOrganizationId,
-        attributedBy: _action.userId, // Assuming the action has userId field
-        impactValue: _action.impactValue,
-        impactUnit: _action.impactUnit,
-      );
-
-      // Reload attribution data
-      await _loadData();
-      
-      setState(() {
-        _showAttributionEdit = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            newOrganizationId == null 
-                ? 'Action changed to personal'
-                : 'Action attributed to organization',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
+      final response = await Supabase.instance.client
+          .from('organizations')
+          .select('id, name, description')
+          .eq('id', organizationId)
+          .single();
+      return response;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating attribution: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      debugPrint('Error fetching organization info: $e');
+      return null;
     }
   }
 }

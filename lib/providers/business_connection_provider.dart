@@ -501,17 +501,24 @@ class BusinessConnectionProvider extends ChangeNotifier {
   Future<List<BusinessConnection>> _fetchConnectionsFromServer(String userId) async {
     final client = SupabaseService.client;
     
-    // First get business connections
-    final connectionsResponse = await client
+    // Get business connections where current user is the user_id
+    final connectionsResponse1 = await client
         .from('business_connections')
         .select()
         .eq('user_id', userId)
         .eq('status', 'accepted');
+    
+    // Get business connections where current user is the counterparty_id
+    final connectionsResponse2 = await client
+        .from('business_connections')
+        .select()
+        .eq('counterparty_id', userId)
+        .eq('status', 'accepted');
 
     List<BusinessConnection> connections = [];
 
-    // For each connection, fetch the profile data
-    for (var connection in connectionsResponse as List) {
+    // Process connections where current user is the user_id
+    for (var connection in connectionsResponse1 as List) {
       final connectionData = BusinessConnection.fromJson(connection);
 
       try {
@@ -547,7 +554,58 @@ class BusinessConnectionProvider extends ChangeNotifier {
       }
     }
     
-    debugPrint('🌐 Fetched ${connections.length} connections from server');
+    // Process connections where current user is the counterparty_id
+    for (var connection in connectionsResponse2 as List) {
+      final originalConnectionData = BusinessConnection.fromJson(connection);
+      
+      // For connections where current user is counterparty, we need to get the user's profile
+      // and create a new connection object with swapped IDs for consistency
+      final otherUserId = originalConnectionData.userId;
+
+      try {
+        // Fetch profile data for the other user (who was originally the user_id)
+        final profileResponse = await client
+            .from('profiles')
+            .select()
+            .eq('id', otherUserId)
+            .single();
+
+        // Fetch SDG data for the other user
+        final sdgResponse = await client
+            .from('user_sdgs')
+            .select('sdg_id')
+            .eq('user_id', otherUserId);
+
+        // Extract SDG IDs
+        List<int> sdgGoals = [];
+        if (sdgResponse != null) {
+          sdgGoals = (sdgResponse as List).map((sdg) => sdg['sdg_id'] as int).toList();
+        }
+
+        // Create a new BusinessConnection object with swapped IDs
+        final swappedConnection = BusinessConnection(
+          id: originalConnectionData.id,
+          userId: userId, // Current user becomes the userId
+          counterpartyId: otherUserId, // Other user becomes the counterparty
+          relationshipType: originalConnectionData.relationshipType,
+          status: originalConnectionData.status,
+          createdAt: originalConnectionData.createdAt,
+          updatedAt: originalConnectionData.updatedAt,
+          name: '${profileResponse['first_name']} ${profileResponse['last_name']}',
+          profileImageUrl: profileResponse['avatar_url'],
+          title: profileResponse['headline'],
+          location: profileResponse['country'],
+          sdgGoals: sdgGoals,
+          organization: profileResponse['organization'] ?? '',
+        );
+
+        connections.add(swappedConnection);
+      } catch (e) {
+        debugPrint('Error fetching profile for connection ${originalConnectionData.id}: $e');
+      }
+    }
+    
+    debugPrint('🌐 Fetched ${connections.length} connections from server (bidirectional)');
     return connections;
   }
   
@@ -618,29 +676,54 @@ class BusinessConnectionProvider extends ChangeNotifier {
         return;
       }
 
-      // Get all connections with their status
+      // Get all connections with their status (bidirectional check)
       debugPrint('🔍 Fetching discover profiles for user: $userId');
-      final myConnectionsResponse = await client
+      
+      // Check connections where current user is the user_id
+      final myConnectionsResponse1 = await client
           .from('business_connections')
           .select('counterparty_id, status')
           .eq('user_id', userId);
+      
+      // Check connections where current user is the counterparty_id
+      final myConnectionsResponse2 = await client
+          .from('business_connections')
+          .select('user_id, status')
+          .eq('counterparty_id', userId);
 
-      debugPrint('📋 My connections response: $myConnectionsResponse');
+      debugPrint('📋 My connections response (as user): $myConnectionsResponse1');
+      debugPrint('📋 My connections response (as counterparty): $myConnectionsResponse2');
 
       // Create maps for connection status tracking
       Map<String, String> connectionStatus = {};
       List<String> excludedUserIds = [];
       
-      if (myConnectionsResponse != null) {
-        for (var connection in myConnectionsResponse as List) {
+      // Process connections where current user is the user_id
+      if (myConnectionsResponse1 != null) {
+        for (var connection in myConnectionsResponse1 as List) {
           final counterpartyId = connection['counterparty_id'] as String;
           final status = connection['status'] as String;
           connectionStatus[counterpartyId] = status;
-          debugPrint('📊 Connection status for $counterpartyId: $status');
+          debugPrint('📊 Connection status for $counterpartyId (as user): $status');
           
           // Exclude both accepted and pending connections from discover
           if (status == 'accepted' || status == 'pending') {
             excludedUserIds.add(counterpartyId);
+          }
+        }
+      }
+      
+      // Process connections where current user is the counterparty_id
+      if (myConnectionsResponse2 != null) {
+        for (var connection in myConnectionsResponse2 as List) {
+          final otherUserId = connection['user_id'] as String;
+          final status = connection['status'] as String;
+          connectionStatus[otherUserId] = status;
+          debugPrint('📊 Connection status for $otherUserId (as counterparty): $status');
+          
+          // Exclude both accepted and pending connections from discover
+          if (status == 'accepted' || status == 'pending') {
+            excludedUserIds.add(otherUserId);
           }
         }
       }

@@ -163,7 +163,7 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
                       return Opacity(
                         opacity: _logoController.value,
                         child: const Text(
-                          'BSCA',
+                          'SDG Network',
                           style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,

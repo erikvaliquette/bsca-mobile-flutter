@@ -10,7 +10,7 @@ import '../services/subscription_helper.dart';
 class OrganizationAttributionWidget extends StatefulWidget {
   final String? currentOrganizationId;
   final Function(String? organizationId) onOrganizationSelected;
-  final String attributionType; // 'target', 'action', 'activity'
+  final String attributionType; // 'action' only - activities cascade automatically
   final bool isRequired;
   final String? helpText;
 

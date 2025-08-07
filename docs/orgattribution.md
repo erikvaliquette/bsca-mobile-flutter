@@ -1,8 +1,20 @@
-# Organization Attribution for SDG Targets, Actions & Activities
+# Organization Attribution for SDG Actions & Activities
 
 ## Overview
 
-This document outlines the strategy for attributing SDG targets, actions, and activities to organizations based on user subscription tiers in the BSCA mobile Flutter app. It covers both the attribution logic and organizational management capabilities.
+This document outlines the strategy for attributing SDG actions and their associated activities to organizations based on user subscription tiers in the BSCA mobile Flutter app. **Attribution occurs at the ACTION LEVEL ONLY** - when an action is attributed to an organization, all associated activities automatically cascade to the same organization attribution.
+
+## Attribution Scope Decision
+
+**SIMPLIFIED ATTRIBUTION MODEL**:
+- ✅ **Actions**: Primary attribution point with organization selection
+- ✅ **Activities**: Automatically inherit parent action's attribution (cascading)
+- ❌ **SDG Targets**: No attribution - targets remain personal for goal-setting
+
+This approach ensures:
+- **Consistency**: All activities under an action have the same attribution
+- **Simplicity**: Single attribution decision per action
+- **Clarity**: Clear organizational ownership of complete action workflows
 
 ## Subscription Tier Requirements
 
