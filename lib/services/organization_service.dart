@@ -8,6 +8,103 @@ class OrganizationService {
   static final OrganizationService instance = OrganizationService._();
 
   final _client = Supabase.instance.client;
+  
+  /// Create a new organization
+  Future<Organization?> createOrganization({
+    required String name,
+    required String userId,
+    String? description,
+    String? website,
+    String? location,
+    String? orgType,
+    String? logoUrl,
+  }) async {
+    try {
+      // 1. Create the organization record
+      final response = await _client.from('organizations').insert({
+        'name': name,
+        'description': description,
+        'website': website,
+        'location': location,
+        'org_type': orgType ?? 'parent', // Default to parent if not specified
+        'logo_url': logoUrl,
+        'admin_ids': [userId], // Legacy support
+        'member_ids': [userId], // Legacy support
+        'status': 'active', // Default status
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select().single();
+      
+      // 2. Create organization membership for the creator (as admin)
+      await _client.from('organization_members').insert({
+        'organization_id': response['id'],
+        'user_id': userId,
+        'role': 'admin',
+        'status': 'approved',
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+      
+      debugPrint('Organization created successfully: ${response['name']}');
+      return _mapToOrganization(response);
+    } catch (e) {
+      debugPrint('Error creating organization: $e');
+      return null;
+    }
+  }
+  
+  /// Update an existing organization
+  Future<Organization?> updateOrganization(Organization organization) async {
+    try {
+      await _client.from('organizations').update({
+        'name': organization.name,
+        'description': organization.description,
+        'website': organization.website,
+        'location': organization.location,
+        'org_type': organization.orgType,
+        'status': organization.status,
+        'logo_url': organization.logoUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', organization.id);
+      
+      debugPrint('Organization updated successfully: ${organization.name}');
+      return organization;
+    } catch (e) {
+      debugPrint('Error updating organization: $e');
+      return null;
+    }
+  }
+  
+  /// Delete an organization
+  Future<bool> deleteOrganization(String organizationId) async {
+    try {
+      // 1. Delete organization memberships
+      await _client.from('organization_members')
+          .delete()
+          .eq('organization_id', organizationId);
+      
+      // 2. Delete organization SDG focus areas
+      await _client.from('organization_sdgs')
+          .delete()
+          .eq('organization_id', organizationId);
+      
+      // 3. Delete organization carbon footprint records
+      await _client.from('organization_carbon_footprint')
+          .delete()
+          .eq('organization_id', organizationId);
+      
+      // 4. Delete the organization record
+      await _client.from('organizations')
+          .delete()
+          .eq('id', organizationId);
+      
+      debugPrint('Organization deleted successfully: $organizationId');
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting organization: $e');
+      return false;
+    }
+  }
 
   /// Get all organizations for the current user (approved memberships only)
   Future<List<Organization>> getOrganizationsForUser(String userId) async {
@@ -382,7 +479,8 @@ class OrganizationService {
       website: data['website'],
       location: data['address'] != null && data['address'] is Map ? 
         _extractLocationFromAddress(data['address']) : null,
-      foundedYear: data['founded_year'],
+      orgType: data['org_type'],
+      status: data['status'],
     );
   }
 

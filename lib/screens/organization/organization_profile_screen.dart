@@ -238,11 +238,299 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
     }
   }
   
+  // Show dialog to edit organization details
+  void _showEditOrganizationDialog(BuildContext context) {
+    final _nameController = TextEditingController(text: _organization.name);
+    final _descriptionController = TextEditingController(text: _organization.description ?? '');
+    final _websiteController = TextEditingController(text: _organization.website ?? '');
+    final _locationController = TextEditingController(text: _organization.location ?? '');
+    final _orgTypeController = TextEditingController(text: _organization.orgType ?? 'parent');
+    final _logoUrlController = TextEditingController(text: _organization.logoUrl ?? '');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Organization'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Name *'),
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: 'Description'),
+                maxLines: 3,
+              ),
+              TextField(
+                controller: _websiteController,
+                decoration: const InputDecoration(labelText: 'Website'),
+              ),
+              TextField(
+                controller: _locationController,
+                decoration: const InputDecoration(labelText: 'Location'),
+              ),
+              DropdownButtonFormField<String>(
+                value: _orgTypeController.text,
+                decoration: const InputDecoration(labelText: 'Organization Type'),
+                items: const [
+                  DropdownMenuItem(value: 'parent', child: Text('Parent')),
+                  DropdownMenuItem(value: 'child', child: Text('Child')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    _orgTypeController.text = value;
+                  }
+                },
+              ),
+              TextField(
+                controller: _logoUrlController,
+                decoration: const InputDecoration(labelText: 'Logo URL'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (_nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Organization name is required')),
+                );
+                return;
+              }
+              
+              // Update organization with new values
+              final updatedOrganization = _organization.copyWith(
+                name: _nameController.text.trim(),
+                description: _descriptionController.text.trim().isNotEmpty 
+                    ? _descriptionController.text.trim() : null,
+                website: _websiteController.text.trim().isNotEmpty 
+                    ? _websiteController.text.trim() : null,
+                location: _locationController.text.trim().isNotEmpty 
+                    ? _locationController.text.trim() : null,
+                orgType: _orgTypeController.text,
+                logoUrl: _logoUrlController.text.trim().isNotEmpty 
+                    ? _logoUrlController.text.trim() : null,
+              );
+              
+              // Store the context before async operations
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final navigatorContext = context;
+              
+              // Close the edit dialog first
+              Navigator.of(context).pop();
+              
+              // Show loading dialog
+              if (mounted) {
+                showDialog(
+                  context: navigatorContext,
+                  barrierDismissible: false,
+                  builder: (context) => const AlertDialog(
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Updating organization...'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              
+              try {
+                final organizationProvider = Provider.of<OrganizationProvider>(navigatorContext, listen: false);
+                final success = await organizationProvider.updateOrganization(updatedOrganization);
+                
+                if (mounted) {
+                  // Close loading dialog
+                  Navigator.of(navigatorContext).pop();
+                  
+                  if (success) {
+                    setState(() {
+                      _organization = updatedOrganization;
+                    });
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(content: Text('Organization updated successfully')),
+                    );
+                  } else {
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(content: Text('Failed to update organization')),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  // Close loading dialog
+                  Navigator.of(navigatorContext).pop();
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('Error updating organization: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Show confirmation dialog for deleting the organization
+  void _showDeleteConfirmationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Organization', style: TextStyle(color: Colors.red)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.red,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text('Are you sure you want to delete ${_organization.name}?'),
+            const SizedBox(height: 16),
+            const Text(
+              'WARNING: This action is permanent and cannot be undone!',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Deleting this organization will also remove:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('• All organization memberships'),
+            const Text('• All SDG focus areas'),
+            const Text('• All carbon footprint data'),
+            const Text('• All related organization data'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () async {
+              // Store the context before async operations
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final navigatorContext = context;
+              
+              // Close the confirmation dialog first
+              Navigator.of(context).pop();
+              
+              // Show loading indicator
+              if (mounted) {
+                showDialog(
+                  context: navigatorContext,
+                  barrierDismissible: false,
+                  builder: (context) => const AlertDialog(
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Deleting organization...'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              
+              try {
+                final organizationProvider = Provider.of<OrganizationProvider>(navigatorContext, listen: false);
+                final success = await organizationProvider.deleteOrganization(_organization.id);
+                
+                if (mounted) {
+                  // Close loading dialog
+                  Navigator.of(navigatorContext).pop();
+                  
+                  if (success) {
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(content: Text('Organization deleted successfully')),
+                    );
+                    
+                    // Use a safer way to navigate back to the organization list
+                    // by popping until we reach the organization list screen
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) {
+                        Navigator.of(navigatorContext).popUntil((route) => route.isFirst);
+                      }
+                    });
+                  } else {
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(content: Text('Failed to delete organization')),
+                    );
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  // Close loading dialog
+                  Navigator.of(navigatorContext).pop();
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('Error deleting organization: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Organization Profile'),
+        actions: _isAdmin ? [
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'edit') {
+                _showEditOrganizationDialog(context);
+              } else if (value == 'delete') {
+                _showDeleteConfirmationDialog(context);
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit),
+                    SizedBox(width: 8),
+                    Text('Edit Organization'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Delete Organization', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ] : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -336,9 +624,9 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
                 ],
               ),
             ],
-            if (widget.organization.foundedYear != null) ...[
+            if (widget.organization.orgType != null) ...[
               const SizedBox(height: 8),
-              Text('Founded in ${widget.organization.foundedYear}'),
+              Text('Organization Type: ${widget.organization.orgType == 'parent' ? 'Parent' : 'Child'}'),
             ],
           ],
         ),

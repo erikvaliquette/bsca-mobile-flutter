@@ -91,21 +91,102 @@ class OrganizationProvider with ChangeNotifier {
     await loadOrganizationDetails(organization.id);
   }
   
-  // Update an organization in the list
-  void updateOrganization(Organization updatedOrganization) {
-    final index = _organizations.indexWhere((org) => org.id == updatedOrganization.id);
-    if (index != -1) {
-      _organizations[index] = updatedOrganization;
-      
-      // Update selected organization if it's the one we just updated
-      if (_selectedOrganization?.id == updatedOrganization.id) {
-        _selectedOrganization = updatedOrganization;
+  // Update an organization in the list and in the database
+  Future<bool> updateOrganization(Organization updatedOrganization) async {
+    try {
+      final updatedOrg = await OrganizationService.instance.updateOrganization(updatedOrganization);
+      if (updatedOrg != null) {
+        final index = _organizations.indexWhere((org) => org.id == updatedOrganization.id);
+        if (index != -1) {
+          _organizations[index] = updatedOrg;
+          
+          // Update selected organization if it's the one we just updated
+          if (_selectedOrganization?.id == updatedOrg.id) {
+            _selectedOrganization = updatedOrg;
+          }
+          
+          notifyListeners();
+          debugPrint('Organization updated successfully: ${updatedOrg.name}');
+          return true;
+        } else {
+          debugPrint('Organization not found in local list for update: ${updatedOrg.id}');
+          return false;
+        }
+      } else {
+        debugPrint('Failed to update organization in database');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error updating organization: $e');
+      return false;
+    }
+  }
+  
+  // Create a new organization
+  Future<Organization?> createOrganization({
+    required String name,
+    String? description,
+    String? website,
+    String? location,
+    String? orgType,
+    String? logoUrl,
+  }) async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('User not authenticated for creating organization');
+        return null;
       }
       
-      notifyListeners();
-      debugPrint('Organization updated successfully: ${updatedOrganization.name}');
-    } else {
-      debugPrint('Organization not found for update: ${updatedOrganization.id}');
+      final newOrg = await OrganizationService.instance.createOrganization(
+        name: name,
+        userId: userId,
+        description: description,
+        website: website,
+        location: location,
+        orgType: orgType,
+        logoUrl: logoUrl,
+      );
+      
+      if (newOrg != null) {
+        _organizations.add(newOrg);
+        _selectedOrganization = newOrg;
+        notifyListeners();
+        debugPrint('Organization created successfully: ${newOrg.name}');
+        return newOrg;
+      } else {
+        debugPrint('Failed to create organization');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error creating organization: $e');
+      return null;
+    }
+  }
+  
+  // Delete an organization
+  Future<bool> deleteOrganization(String organizationId) async {
+    try {
+      final success = await OrganizationService.instance.deleteOrganization(organizationId);
+      if (success) {
+        // Remove from local list
+        _organizations.removeWhere((org) => org.id == organizationId);
+        
+        // Reset selected organization if it was the deleted one
+        if (_selectedOrganization?.id == organizationId) {
+          _selectedOrganization = _organizations.isNotEmpty ? _organizations.first : null;
+        }
+        
+        notifyListeners();
+        debugPrint('Organization deleted successfully: $organizationId');
+        return true;
+      } else {
+        debugPrint('Failed to delete organization from database');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error deleting organization: $e');
+      return false;
     }
   }
   
@@ -249,7 +330,8 @@ class OrganizationProvider with ChangeNotifier {
       logoUrl: 'https://placehold.co/400x400?text=EcoTech',
       website: 'https://ecotechsolutions.example.com',
       location: 'San Francisco, CA',
-      foundedYear: 2010,
+      orgType: 'parent',
+      status: 'active',
       sustainabilityMetrics: [
         SustainabilityMetric(
           name: 'Renewable Energy Usage',

@@ -7,7 +7,8 @@ class Organization {
   final String? logoUrl;
   final String? website;
   final String? location;
-  final int? foundedYear;
+  final String? orgType;
+  final String? status;
   final List<SustainabilityMetric>? sustainabilityMetrics;
   final CarbonFootprint? carbonFootprint;
   final List<TeamMember>? teamMembers;
@@ -21,7 +22,8 @@ class Organization {
     this.logoUrl,
     this.website,
     this.location,
-    this.foundedYear,
+    this.orgType,
+    this.status,
     this.sustainabilityMetrics,
     this.carbonFootprint,
     this.teamMembers,
@@ -36,7 +38,8 @@ class Organization {
     String? logoUrl,
     String? website,
     String? location,
-    int? foundedYear,
+    String? orgType,
+    String? status,
     List<SustainabilityMetric>? sustainabilityMetrics,
     CarbonFootprint? carbonFootprint,
     List<TeamMember>? teamMembers,
@@ -50,7 +53,8 @@ class Organization {
       logoUrl: logoUrl ?? this.logoUrl,
       website: website ?? this.website,
       location: location ?? this.location,
-      foundedYear: foundedYear ?? this.foundedYear,
+      orgType: orgType ?? this.orgType,
+      status: status ?? this.status,
       sustainabilityMetrics: sustainabilityMetrics ?? this.sustainabilityMetrics,
       carbonFootprint: carbonFootprint ?? this.carbonFootprint,
       teamMembers: teamMembers ?? this.teamMembers,
@@ -67,7 +71,8 @@ class Organization {
       logoUrl: json['logo_url'],
       website: json['website'],
       location: json['location'],
-      foundedYear: json['founded_year'],
+      orgType: json['org_type'],
+      status: json['status'],
       // These fields are fetched separately by the OrganizationService
       sustainabilityMetrics: null,
       carbonFootprint: null,
@@ -85,7 +90,8 @@ class Organization {
       'logo_url': logoUrl,
       'website': website,
       'location': location,
-      'founded_year': foundedYear,
+      'org_type': orgType,
+      'status': status,
       // These fields are managed separately
       // 'sustainability_metrics': sustainabilityMetrics?.map((metric) => metric.toJson()).toList(),
       // 'carbon_footprint': carbonFootprint?.toJson(),
