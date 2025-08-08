@@ -13,6 +13,7 @@ import 'package:bsca_mobile_flutter/services/action_activity_service.dart';
 
 import 'package:bsca_mobile_flutter/widgets/sdg_icon_widget.dart';
 import 'package:bsca_mobile_flutter/widgets/add_activity_dialog.dart';
+import 'package:bsca_mobile_flutter/widgets/attribution_avatar_widget.dart';
 import 'package:bsca_mobile_flutter/screens/actions/add_action_screen.dart';
 import 'package:bsca_mobile_flutter/screens/action_detail_screen.dart';
 
@@ -371,6 +372,12 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Attribution Avatar for Target
+                  CompactAttributionAvatar(
+                    organizationId: target.organizationId,
+                    userId: target.userId,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       target.description,
@@ -547,6 +554,12 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Attribution Avatar for Action
+                  CompactAttributionAvatar(
+                    organizationId: action.organizationId,
+                    userId: action.userId,
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       action.title,
@@ -714,6 +727,12 @@ class _SdgTargetsScreenState extends State<SdgTargetsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
+              // Attribution Avatar for Activity
+              CompactAttributionAvatar(
+                organizationId: activity.organizationId,
+                userId: activity.userId,
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   activity.title,

@@ -276,6 +276,47 @@ class OrganizationProvider with ChangeNotifier {
     }
   }
   
+  // Get organization basic info by ID (for avatars and quick lookups)
+  Future<Map<String, dynamic>?> getOrganizationBasicInfo(String organizationId) async {
+    try {
+      // First check if we have it in our cached organizations
+      final cachedOrg = _organizations.firstWhere(
+        (org) => org.id == organizationId,
+        orElse: () => Organization(
+          id: '',
+          name: '',
+          description: '',
+          website: '',
+          location: '',
+          logoUrl: '',
+        ),
+      );
+      
+      if (cachedOrg.id.isNotEmpty) {
+        return {
+          'id': cachedOrg.id,
+          'name': cachedOrg.name,
+          'logo_url': cachedOrg.logoUrl,
+        };
+      }
+      
+      // If not in cache, fetch from service
+      final organization = await OrganizationService.instance.getOrganizationById(organizationId);
+      if (organization != null) {
+        return {
+          'id': organization.id,
+          'name': organization.name,
+          'logo_url': organization.logoUrl,
+        };
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('Error getting organization basic info: $e');
+      return null;
+    }
+  }
+  
   // Fetch organization by ID
   Future<void> fetchOrganizationById(String organizationId) async {
     _isLoading = true;
