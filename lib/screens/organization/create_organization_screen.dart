@@ -181,26 +181,33 @@ class CreateOrganizationScreen extends StatelessWidget {
                     // Always refresh the organization list first
                     await organizationProvider.fetchCurrentUserOrganization();
                     
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Organization created successfully'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                    // Check if the widget is still mounted before showing snackbar
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Organization created successfully'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
                     
-                    Navigator.of(context).pop(true); // Close screen with result
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => OrganizationProfileScreen(organization: newOrg),
-                      ),
-                    );
+                    // Navigate to the organization profile and replace this screen
+                    if (context.mounted) {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => OrganizationProfileScreen(organization: newOrg),
+                        ),
+                      );
+                    }
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Failed to create organization - please try again'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Failed to create organization - please try again'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
                 } catch (e) {
                   debugPrint('Organization creation error: $e');
@@ -219,13 +226,15 @@ class CreateOrganizationScreen extends StatelessWidget {
                     errorMessage = 'An organization with this name already exists';
                   }
                   
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(errorMessage),
-                      backgroundColor: Colors.red,
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                  }
                 }
               },
               child: const Text('Create'),
