@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:bsca_mobile_flutter/models/organization_model.dart';
-import 'package:bsca_mobile_flutter/providers/organization_provider.dart';
-import 'package:bsca_mobile_flutter/services/notifications/notification_provider.dart';
-import 'package:bsca_mobile_flutter/screens/organization/organization_profile_screen.dart';
+import '../../../providers/organization_provider.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../models/organization_model.dart';
+import '../../../services/lei_service.dart';
+import 'organization_profile_screen.dart';
+import 'create_organization_screen.dart';
+import '../../../services/notifications/notification_provider.dart';
 
 class OrganizationScreen extends StatefulWidget {
   const OrganizationScreen({super.key});
@@ -36,7 +39,7 @@ class _OrganizationScreenState extends State<OrganizationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Organizations'),
+        title: const Text('Organization Manager'),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateOrganizationDialog(context),
@@ -96,151 +99,9 @@ class _OrganizationScreenState extends State<OrganizationScreen> {
 
   // Show dialog to create a new organization
   void _showCreateOrganizationDialog(BuildContext context) {
-    final _nameController = TextEditingController();
-    final _descriptionController = TextEditingController();
-    final _websiteController = TextEditingController();
-    final _locationController = TextEditingController();
-    final _orgTypeController = TextEditingController(text: 'parent');
-    final _logoUrlController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Organization'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name *'),
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 3,
-              ),
-              TextField(
-                controller: _websiteController,
-                decoration: const InputDecoration(labelText: 'Website'),
-              ),
-              TextField(
-                controller: _locationController,
-                decoration: const InputDecoration(labelText: 'Location'),
-              ),
-              DropdownButtonFormField<String>(
-                value: _orgTypeController.text,
-                decoration: const InputDecoration(labelText: 'Organization Type'),
-                items: const [
-                  DropdownMenuItem(value: 'parent', child: Text('Parent')),
-                  DropdownMenuItem(value: 'child', child: Text('Child')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    _orgTypeController.text = value;
-                  }
-                },
-              ),
-              TextField(
-                controller: _logoUrlController,
-                decoration: const InputDecoration(labelText: 'Logo URL'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (_nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Organization name is required')),
-                );
-                return;
-              }
-              
-              // Store the context before async operations
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final navigatorContext = context;
-              
-              // Close the create dialog first
-              Navigator.of(context).pop();
-              
-              // Show loading dialog
-              if (mounted) {
-                showDialog(
-                  context: navigatorContext,
-                  barrierDismissible: false,
-                  builder: (context) => const AlertDialog(
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text('Creating organization...'),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              
-              try {
-                final organizationProvider = Provider.of<OrganizationProvider>(navigatorContext, listen: false);
-                
-                final newOrg = await organizationProvider.createOrganization(
-                  name: _nameController.text.trim(),
-                  description: _descriptionController.text.trim().isNotEmpty 
-                      ? _descriptionController.text.trim() : null,
-                  website: _websiteController.text.trim().isNotEmpty 
-                      ? _websiteController.text.trim() : null,
-                  location: _locationController.text.trim().isNotEmpty 
-                      ? _locationController.text.trim() : null,
-                  orgType: _orgTypeController.text,
-                  logoUrl: _logoUrlController.text.trim().isNotEmpty 
-                      ? _logoUrlController.text.trim() : null,
-                );
-                
-                if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
-                  
-                  if (newOrg != null) {
-                    scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Organization created successfully')),
-                    );
-                    
-                    // Navigate to the organization profile screen
-                    if (mounted) {
-                      Navigator.of(navigatorContext).push(
-                        MaterialPageRoute(
-                          builder: (context) => OrganizationProfileScreen(
-                            organization: newOrg,
-                          ),
-                        ),
-                      );
-                    }
-                  } else {
-                    scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Failed to create organization')),
-                    );
-                  }
-                }
-              } catch (e) {
-                if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('Error creating organization: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CreateOrganizationScreen(),
       ),
     );
   }
@@ -312,7 +173,7 @@ class _OrganizationScreenState extends State<OrganizationScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (organization.location != null && organization.location!.isNotEmpty) ...[  
+                    if (organization.locationString != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -320,7 +181,7 @@ class _OrganizationScreenState extends State<OrganizationScreen> {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              organization.location!,
+                              organization.locationString!,
                               style: Theme.of(context).textTheme.bodyMedium,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,

@@ -468,7 +468,7 @@ class _EditWorkHistoryScreenState extends State<EditWorkHistoryScreen> {
                                     final org = _searchResults[index];
                                     return ListTile(
                                       title: Text(org.name),
-                                      subtitle: org.location != null ? Text(org.location!) : null,
+                                      subtitle: org.address != null ? Text(_formatOrgAddress(org.address!)) : null,
                                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                                       onTap: () => _selectSearchResult(org),
                                     );
@@ -630,5 +630,24 @@ class _EditWorkHistoryScreenState extends State<EditWorkHistoryScreen> {
         ),
       ),
     );
+  }
+
+  // Helper method to format organization address
+  String _formatOrgAddress(OrganizationAddress address) {
+    final parts = <String>[];
+    
+    if (address.city != null && address.city!.isNotEmpty) {
+      parts.add(address.city!);
+    }
+    
+    if (address.stateProvince != null && address.stateProvince!.isNotEmpty) {
+      parts.add(address.stateProvince!);
+    }
+    
+    if (address.country != null && address.country!.isNotEmpty) {
+      parts.add(address.country!);
+    }
+    
+    return parts.isEmpty ? 'No location available' : parts.join(', ');
   }
 }

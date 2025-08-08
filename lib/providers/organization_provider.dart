@@ -126,10 +126,17 @@ class OrganizationProvider with ChangeNotifier {
   Future<Organization?> createOrganization({
     required String name,
     String? description,
-    String? website,
-    String? location,
     String? orgType,
     String? logoUrl,
+    String? parentId,
+    String? taxNumber,
+    String? registrationNumber,
+    String? leiCode,
+    bool? leiVerified,
+    String? vleiStatus,
+    Map<String, dynamic>? vleiCredentials,
+    DateTime? vleiVerificationDate,
+    OrganizationAddress? address,
   }) async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -142,10 +149,17 @@ class OrganizationProvider with ChangeNotifier {
         name: name,
         userId: userId,
         description: description,
-        website: website,
-        location: location,
         orgType: orgType,
         logoUrl: logoUrl,
+        parentId: parentId,
+        taxNumber: taxNumber,
+        registrationNumber: registrationNumber,
+        leiCode: leiCode,
+        leiVerified: leiVerified,
+        vleiStatus: vleiStatus,
+        vleiCredentials: vleiCredentials,
+        vleiVerificationDate: vleiVerificationDate,
+        address: address,
       );
       
       if (newOrg != null) {
@@ -286,9 +300,9 @@ class OrganizationProvider with ChangeNotifier {
           id: '',
           name: '',
           description: '',
-          website: '',
-          location: '',
           logoUrl: '',
+          orgType: 'parent',
+          status: 'active',
         ),
       );
       
@@ -369,10 +383,13 @@ class OrganizationProvider with ChangeNotifier {
       name: 'EcoTech Solutions',
       description: 'A leading sustainable technology company focused on developing innovative solutions for environmental challenges.',
       logoUrl: 'https://placehold.co/400x400?text=EcoTech',
-      website: 'https://ecotechsolutions.example.com',
-      location: 'San Francisco, CA',
       orgType: 'parent',
       status: 'active',
+      address: OrganizationAddress(
+        city: 'San Francisco',
+        stateProvince: 'CA',
+        country: 'United States',
+      ),
       sustainabilityMetrics: [
         SustainabilityMetric(
           name: 'Renewable Energy Usage',

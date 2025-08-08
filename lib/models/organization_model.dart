@@ -5,10 +5,21 @@ class Organization {
   final String name;
   final String? description;
   final String? logoUrl;
-  final String? website;
-  final String? location;
   final String? orgType;
   final String? status;
+  final String? parentId;
+  final String? parentOrgId;
+  final String? taxNumber;
+  final String? registrationNumber;
+  final String? leiCode;
+  final bool? leiVerified;
+  final String? vleiStatus;
+  final Map<String, dynamic>? vleiCredentials;
+  final DateTime? vleiVerificationDate;
+  final OrganizationAddress? address;
+  final List<String>? adminIds;
+  final List<String>? memberIds;
+  final List<String>? pendingMemberIds;
   final List<SustainabilityMetric>? sustainabilityMetrics;
   final CarbonFootprint? carbonFootprint;
   final List<TeamMember>? teamMembers;
@@ -20,10 +31,21 @@ class Organization {
     required this.name,
     this.description,
     this.logoUrl,
-    this.website,
-    this.location,
     this.orgType,
     this.status,
+    this.parentId,
+    this.parentOrgId,
+    this.taxNumber,
+    this.registrationNumber,
+    this.leiCode,
+    this.leiVerified,
+    this.vleiStatus,
+    this.vleiCredentials,
+    this.vleiVerificationDate,
+    this.address,
+    this.adminIds,
+    this.memberIds,
+    this.pendingMemberIds,
     this.sustainabilityMetrics,
     this.carbonFootprint,
     this.teamMembers,
@@ -36,10 +58,21 @@ class Organization {
     String? name,
     String? description,
     String? logoUrl,
-    String? website,
-    String? location,
     String? orgType,
     String? status,
+    String? parentId,
+    String? parentOrgId,
+    String? taxNumber,
+    String? registrationNumber,
+    String? leiCode,
+    bool? leiVerified,
+    String? vleiStatus,
+    Map<String, dynamic>? vleiCredentials,
+    DateTime? vleiVerificationDate,
+    OrganizationAddress? address,
+    List<String>? adminIds,
+    List<String>? memberIds,
+    List<String>? pendingMemberIds,
     List<SustainabilityMetric>? sustainabilityMetrics,
     CarbonFootprint? carbonFootprint,
     List<TeamMember>? teamMembers,
@@ -51,10 +84,21 @@ class Organization {
       name: name ?? this.name,
       description: description ?? this.description,
       logoUrl: logoUrl ?? this.logoUrl,
-      website: website ?? this.website,
-      location: location ?? this.location,
       orgType: orgType ?? this.orgType,
       status: status ?? this.status,
+      parentId: parentId ?? this.parentId,
+      parentOrgId: parentOrgId ?? this.parentOrgId,
+      taxNumber: taxNumber ?? this.taxNumber,
+      registrationNumber: registrationNumber ?? this.registrationNumber,
+      leiCode: leiCode ?? this.leiCode,
+      leiVerified: leiVerified ?? this.leiVerified,
+      vleiStatus: vleiStatus ?? this.vleiStatus,
+      vleiCredentials: vleiCredentials ?? this.vleiCredentials,
+      vleiVerificationDate: vleiVerificationDate ?? this.vleiVerificationDate,
+      address: address ?? this.address,
+      adminIds: adminIds ?? this.adminIds,
+      memberIds: memberIds ?? this.memberIds,
+      pendingMemberIds: pendingMemberIds ?? this.pendingMemberIds,
       sustainabilityMetrics: sustainabilityMetrics ?? this.sustainabilityMetrics,
       carbonFootprint: carbonFootprint ?? this.carbonFootprint,
       teamMembers: teamMembers ?? this.teamMembers,
@@ -69,10 +113,26 @@ class Organization {
       name: json['name'],
       description: json['description'],
       logoUrl: json['logo_url'],
-      website: json['website'],
-      location: json['location'],
       orgType: json['org_type'],
       status: json['status'],
+      parentId: json['parent_id'],
+      parentOrgId: json['parent_org_id'],
+      taxNumber: json['tax_number'],
+      registrationNumber: json['registration_number'],
+      leiCode: json['lei_code'],
+      leiVerified: json['lei_verified'],
+      vleiStatus: json['vlei_status'],
+      vleiCredentials: json['vlei_credentials'],
+      vleiVerificationDate: json['vlei_verification_date'] != null 
+          ? DateTime.parse(json['vlei_verification_date']) : null,
+      address: json['address'] != null 
+          ? OrganizationAddress.fromJson(json['address']) : null,
+      adminIds: json['admin_ids'] != null 
+          ? List<String>.from(json['admin_ids']) : null,
+      memberIds: json['member_ids'] != null 
+          ? List<String>.from(json['member_ids']) : null,
+      pendingMemberIds: json['pending_member_ids'] != null 
+          ? List<String>.from(json['pending_member_ids']) : null,
       // These fields are fetched separately by the OrganizationService
       sustainabilityMetrics: null,
       carbonFootprint: null,
@@ -88,10 +148,21 @@ class Organization {
       'name': name,
       'description': description,
       'logo_url': logoUrl,
-      'website': website,
-      'location': location,
       'org_type': orgType,
       'status': status,
+      'parent_id': parentId,
+      'parent_org_id': parentOrgId,
+      'tax_number': taxNumber,
+      'registration_number': registrationNumber,
+      'lei_code': leiCode,
+      'lei_verified': leiVerified,
+      'vlei_status': vleiStatus,
+      'vlei_credentials': vleiCredentials,
+      'vlei_verification_date': vleiVerificationDate?.toIso8601String(),
+      'address': address?.toJson(),
+      'admin_ids': adminIds,
+      'member_ids': memberIds,
+      'pending_member_ids': pendingMemberIds,
       // These fields are managed separately
       // 'sustainability_metrics': sustainabilityMetrics?.map((metric) => metric.toJson()).toList(),
       // 'carbon_footprint': carbonFootprint?.toJson(),
@@ -99,6 +170,68 @@ class Organization {
       // 'sdg_focus_areas': sdgFocusAreas,
       // 'activities': activities?.map((activity) => activity.toJson()).toList(),
     };
+  }
+  
+  // Helper method to get location string from address
+  String? get locationString {
+    if (address == null) return null;
+    final parts = <String>[];
+    if (address!.city?.isNotEmpty == true) parts.add(address!.city!);
+    if (address!.stateProvince?.isNotEmpty == true) parts.add(address!.stateProvince!);
+    if (address!.country?.isNotEmpty == true) parts.add(address!.country!);
+    return parts.isNotEmpty ? parts.join(', ') : null;
+  }
+}
+
+class OrganizationAddress {
+  final String? streetAddress;
+  final String? city;
+  final String? stateProvince;
+  final String? country;
+  final String? postalCode;
+
+  OrganizationAddress({
+    this.streetAddress,
+    this.city,
+    this.stateProvince,
+    this.country,
+    this.postalCode,
+  });
+
+  factory OrganizationAddress.fromJson(Map<String, dynamic> json) {
+    return OrganizationAddress(
+      streetAddress: json['street_address'],
+      city: json['city'],
+      stateProvince: json['state_province'] ?? json['state'],
+      country: json['country'],
+      postalCode: json['postal_code'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'street_address': streetAddress,
+      'city': city,
+      'state_province': stateProvince,
+      'country': country,
+      'postal_code': postalCode,
+    };
+  }
+
+  OrganizationAddress copyWith({
+    String? streetAddress,
+    String? city,
+    String? stateProvince,
+    String? country,
+    String? postalCode,
+  }) {
+    return OrganizationAddress(
+      streetAddress: streetAddress ?? this.streetAddress,
+      city: city ?? this.city,
+      stateProvince: stateProvince ?? this.stateProvince,
+      country: country ?? this.country,
+      postalCode: postalCode ?? this.postalCode,
+    );
   }
 }
 

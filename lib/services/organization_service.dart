@@ -14,20 +14,34 @@ class OrganizationService {
     required String name,
     required String userId,
     String? description,
-    String? website,
-    String? location,
     String? orgType,
     String? logoUrl,
+    String? parentId,
+    String? taxNumber,
+    String? registrationNumber,
+    String? leiCode,
+    bool? leiVerified,
+    String? vleiStatus,
+    Map<String, dynamic>? vleiCredentials,
+    DateTime? vleiVerificationDate,
+    OrganizationAddress? address,
   }) async {
     try {
       // 1. Create the organization record
       final response = await _client.from('organizations').insert({
         'name': name,
         'description': description,
-        'website': website,
-        'location': location,
         'org_type': orgType ?? 'parent', // Default to parent if not specified
         'logo_url': logoUrl,
+        'parent_id': parentId,
+        'tax_number': taxNumber,
+        'registration_number': registrationNumber,
+        'lei_code': leiCode,
+        'lei_verified': leiVerified ?? false,
+        'vlei_status': vleiStatus ?? 'none',
+        'vlei_credentials': vleiCredentials,
+        'vlei_verification_date': vleiVerificationDate?.toIso8601String(),
+        'address': address?.toJson(),
         'admin_ids': [userId], // Legacy support
         'member_ids': [userId], // Legacy support
         'status': 'active', // Default status
@@ -59,11 +73,18 @@ class OrganizationService {
       await _client.from('organizations').update({
         'name': organization.name,
         'description': organization.description,
-        'website': organization.website,
-        'location': organization.location,
         'org_type': organization.orgType,
         'status': organization.status,
         'logo_url': organization.logoUrl,
+        'parent_id': organization.parentId,
+        'tax_number': organization.taxNumber,
+        'registration_number': organization.registrationNumber,
+        'lei_code': organization.leiCode,
+        'lei_verified': organization.leiVerified,
+        'vlei_status': organization.vleiStatus,
+        'vlei_credentials': organization.vleiCredentials,
+        'vlei_verification_date': organization.vleiVerificationDate?.toIso8601String(),
+        'address': organization.address?.toJson(),
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', organization.id);
       
@@ -476,27 +497,30 @@ class OrganizationService {
       name: data['name'] ?? 'Unknown Organization',
       description: data['description'],
       logoUrl: data['logo_url'],
-      website: data['website'],
-      location: data['address'] != null && data['address'] is Map ? 
-        _extractLocationFromAddress(data['address']) : null,
       orgType: data['org_type'],
       status: data['status'],
+      parentId: data['parent_id'],
+      parentOrgId: data['parent_org_id'],
+      taxNumber: data['tax_number'],
+      registrationNumber: data['registration_number'],
+      leiCode: data['lei_code'],
+      leiVerified: data['lei_verified'],
+      vleiStatus: data['vlei_status'],
+      vleiCredentials: data['vlei_credentials'],
+      vleiVerificationDate: data['vlei_verification_date'] != null 
+          ? DateTime.parse(data['vlei_verification_date']) : null,
+      address: data['address'] != null 
+          ? OrganizationAddress.fromJson(data['address']) : null,
+      adminIds: data['admin_ids'] != null 
+          ? List<String>.from(data['admin_ids']) : null,
+      memberIds: data['member_ids'] != null 
+          ? List<String>.from(data['member_ids']) : null,
+      pendingMemberIds: data['pending_member_ids'] != null 
+          ? List<String>.from(data['pending_member_ids']) : null,
     );
   }
 
-  /// Extract location from address JSON
-  String? _extractLocationFromAddress(Map<String, dynamic> address) {
-    final city = address['city'];
-    final state = address['state'];
-    final country = address['country'];
-    
-    if (city != null && country != null) {
-      return '$city, $country';
-    } else if (country != null) {
-      return country;
-    }
-    return null;
-  }
+
   
   /// Map Supabase response to UserProfile model
   UserProfile _mapToUserProfile(Map<String, dynamic> data) {

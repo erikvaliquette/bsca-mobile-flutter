@@ -9,6 +9,7 @@ import 'package:bsca_mobile_flutter/providers/organization_sdg_provider.dart';
 import 'package:bsca_mobile_flutter/services/organization_service.dart';
 import 'package:bsca_mobile_flutter/services/organization_sdg_service.dart';
 import 'package:bsca_mobile_flutter/services/validation_service.dart';
+import 'package:bsca_mobile_flutter/services/lei_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:bsca_mobile_flutter/screens/organization/carbon_footprint_screen.dart';
 import 'package:bsca_mobile_flutter/screens/organization/team_members_screen.dart';
@@ -242,143 +243,340 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
   void _showEditOrganizationDialog(BuildContext context) {
     final _nameController = TextEditingController(text: _organization.name);
     final _descriptionController = TextEditingController(text: _organization.description ?? '');
-    final _websiteController = TextEditingController(text: _organization.website ?? '');
-    final _locationController = TextEditingController(text: _organization.location ?? '');
-    final _orgTypeController = TextEditingController(text: _organization.orgType ?? 'parent');
+    final _taxNumberController = TextEditingController(text: _organization.taxNumber ?? '');
+    final _registrationNumberController = TextEditingController(text: _organization.registrationNumber ?? '');
+    final _leiCodeController = TextEditingController(text: _organization.leiCode ?? '');
+    final _streetAddressController = TextEditingController(text: _organization.address?.streetAddress ?? '');
+    final _cityController = TextEditingController(text: _organization.address?.city ?? '');
+    final _stateProvinceController = TextEditingController(text: _organization.address?.stateProvince ?? '');
+    final _postalCodeController = TextEditingController(text: _organization.address?.postalCode ?? '');
+    final _countryController = TextEditingController(text: _organization.address?.country ?? '');
     final _logoUrlController = TextEditingController(text: _organization.logoUrl ?? '');
+    
+    String _selectedOrgType = _organization.orgType ?? 'parent';
+    String _selectedAddressType = 'Headquarters';
+    bool _isSearchingLEI = false;
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Organization'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name *'),
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 3,
-              ),
-              TextField(
-                controller: _websiteController,
-                decoration: const InputDecoration(labelText: 'Website'),
-              ),
-              TextField(
-                controller: _locationController,
-                decoration: const InputDecoration(labelText: 'Location'),
-              ),
-              DropdownButtonFormField<String>(
-                value: _orgTypeController.text,
-                decoration: const InputDecoration(labelText: 'Organization Type'),
-                items: const [
-                  DropdownMenuItem(value: 'parent', child: Text('Parent')),
-                  DropdownMenuItem(value: 'child', child: Text('Child')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    _orgTypeController.text = value;
-                  }
-                },
-              ),
-              TextField(
-                controller: _logoUrlController,
-                decoration: const InputDecoration(labelText: 'Logo URL'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (_nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Organization name is required')),
-                );
-                return;
-              }
-              
-              // Update organization with new values
-              final updatedOrganization = _organization.copyWith(
-                name: _nameController.text.trim(),
-                description: _descriptionController.text.trim().isNotEmpty 
-                    ? _descriptionController.text.trim() : null,
-                website: _websiteController.text.trim().isNotEmpty 
-                    ? _websiteController.text.trim() : null,
-                location: _locationController.text.trim().isNotEmpty 
-                    ? _locationController.text.trim() : null,
-                orgType: _orgTypeController.text,
-                logoUrl: _logoUrlController.text.trim().isNotEmpty 
-                    ? _logoUrlController.text.trim() : null,
-              );
-              
-              // Store the context before async operations
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final navigatorContext = context;
-              
-              // Close the edit dialog first
-              Navigator.of(context).pop();
-              
-              // Show loading dialog
-              if (mounted) {
-                showDialog(
-                  context: navigatorContext,
-                  barrierDismissible: false,
-                  builder: (context) => const AlertDialog(
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text('Updating organization...'),
-                      ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Organization'),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Organization Name
+                  const Text(
+                    'Organization Name *',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter organization name',
+                      border: OutlineInputBorder(),
                     ),
                   ),
-                );
-              }
-              
-              try {
-                final organizationProvider = Provider.of<OrganizationProvider>(navigatorContext, listen: false);
-                final success = await organizationProvider.updateOrganization(updatedOrganization);
-                
-                if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
+                  const SizedBox(height: 16),
                   
-                  if (success) {
-                    setState(() {
-                      _organization = updatedOrganization;
-                    });
+                  // Description
+                  const Text(
+                    'Description',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter organization description',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Business Information
+                  const Text(
+                    'Business Information',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _taxNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tax Number',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _registrationNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Registration Number',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _leiCodeController,
+                          decoration: const InputDecoration(
+                            labelText: 'LEI Code',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLength: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _isSearchingLEI ? null : () async {
+                          if (_leiCodeController.text.length == 20) {
+                            setState(() => _isSearchingLEI = true);
+                            try {
+                              final details = await LEIService.searchByLEI(_leiCodeController.text);
+                              if (details != null) {
+                                setState(() {
+                                  _nameController.text = details.name;
+                                  if (details.address != null) {
+                                    _streetAddressController.text = details.address!.streetAddress ?? '';
+                                    _cityController.text = details.address!.city ?? '';
+                                    _stateProvinceController.text = details.address!.stateProvince ?? '';
+                                    _countryController.text = details.address!.country ?? '';
+                                    _postalCodeController.text = details.address!.postalCode ?? '';
+                                  }
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Organization found: ${details.name}'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error searching LEI: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            } finally {
+                              setState(() => _isSearchingLEI = false);
+                            }
+                          }
+                        },
+                        child: _isSearchingLEI 
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Search'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Primary Address
+                  const Text(
+                    'Primary Address',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedAddressType,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Headquarters', child: Text('Headquarters')),
+                      DropdownMenuItem(value: 'Main Office', child: Text('Main Office')),
+                      DropdownMenuItem(value: 'Branch', child: Text('Branch')),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedAddressType = value!);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _streetAddressController,
+                    decoration: const InputDecoration(
+                      labelText: 'Street Address',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _cityController,
+                    decoration: const InputDecoration(
+                      labelText: 'City',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _stateProvinceController,
+                    decoration: const InputDecoration(
+                      labelText: 'State/Province',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _postalCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Postal Code',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _countryController,
+                    decoration: const InputDecoration(
+                      labelText: 'Country',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Organization Logo
+                  const Text(
+                    'Organization Logo',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // TODO: Implement file upload
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Logo upload coming soon')),
+                      );
+                    },
+                    icon: const Icon(Icons.upload),
+                    label: const Text('Upload Logo'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (_nameController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Organization name is required')),
+                  );
+                  return;
+                }
+                
+                // Create address object if any address fields are filled
+                OrganizationAddress? address;
+                if (_streetAddressController.text.trim().isNotEmpty ||
+                    _cityController.text.trim().isNotEmpty ||
+                    _stateProvinceController.text.trim().isNotEmpty ||
+                    _countryController.text.trim().isNotEmpty ||
+                    _postalCodeController.text.trim().isNotEmpty) {
+                  address = OrganizationAddress(
+                    streetAddress: _streetAddressController.text.trim().isNotEmpty 
+                        ? _streetAddressController.text.trim() : null,
+                    city: _cityController.text.trim().isNotEmpty 
+                        ? _cityController.text.trim() : null,
+                    stateProvince: _stateProvinceController.text.trim().isNotEmpty 
+                        ? _stateProvinceController.text.trim() : null,
+                    country: _countryController.text.trim().isNotEmpty 
+                        ? _countryController.text.trim() : null,
+                    postalCode: _postalCodeController.text.trim().isNotEmpty 
+                        ? _postalCodeController.text.trim() : null,
+                  );
+                }
+                
+                // Update organization with new values
+                final updatedOrganization = _organization.copyWith(
+                  name: _nameController.text.trim(),
+                  description: _descriptionController.text.trim().isNotEmpty 
+                      ? _descriptionController.text.trim() : null,
+                  orgType: _selectedOrgType,
+                  taxNumber: _taxNumberController.text.trim().isNotEmpty 
+                      ? _taxNumberController.text.trim() : null,
+                  registrationNumber: _registrationNumberController.text.trim().isNotEmpty 
+                      ? _registrationNumberController.text.trim() : null,
+                  leiCode: _leiCodeController.text.trim().isNotEmpty 
+                      ? _leiCodeController.text.trim() : null,
+                  address: address,
+                  logoUrl: _logoUrlController.text.trim().isNotEmpty 
+                      ? _logoUrlController.text.trim() : null,
+                );
+                
+                // Store the context before async operations
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                final navigatorContext = context;
+                
+                // Close the edit dialog first
+                Navigator.of(context).pop();
+                
+                // Show loading dialog
+                if (mounted) {
+                  showDialog(
+                    context: navigatorContext,
+                    barrierDismissible: false,
+                    builder: (context) => const AlertDialog(
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text('Updating organization...'),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                
+                try {
+                  final organizationProvider = Provider.of<OrganizationProvider>(navigatorContext, listen: false);
+                  final success = await organizationProvider.updateOrganization(updatedOrganization);
+                  
+                  if (mounted) {
+                    // Close loading dialog
+                    Navigator.of(navigatorContext).pop();
+                    
+                    if (success) {
+                      setState(() {
+                        _organization = updatedOrganization;
+                      });
+                      scaffoldMessenger.showSnackBar(
+                        const SnackBar(content: Text('Organization updated successfully')),
+                      );
+                    } else {
+                      scaffoldMessenger.showSnackBar(
+                        const SnackBar(content: Text('Failed to update organization')),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    // Close loading dialog
+                    Navigator.of(navigatorContext).pop();
                     scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Organization updated successfully')),
-                    );
-                  } else {
-                    scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Failed to update organization')),
+                      SnackBar(content: Text('Error updating organization: $e')),
                     );
                   }
                 }
-              } catch (e) {
-                if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('Error updating organization: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+              },
+              child: const Text('Update'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -455,19 +653,35 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
                 final success = await organizationProvider.deleteOrganization(_organization.id);
                 
                 if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
+                  // Close loading dialog safely
+                  try {
+                    Navigator.of(navigatorContext).pop();
+                  } catch (navError) {
+                    debugPrint('Navigation error closing dialog: $navError');
+                  }
                   
                   if (success) {
                     scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Organization deleted successfully')),
+                      const SnackBar(
+                        content: Text('Organization deleted successfully'),
+                        backgroundColor: Colors.green,
+                      ),
                     );
                     
-                    // Use a safer way to navigate back to the organization list
-                    // by popping until we reach the organization list screen
-                    Future.delayed(const Duration(milliseconds: 300), () {
+                    // Navigate back safely with delay
+                    Future.delayed(const Duration(milliseconds: 500), () {
                       if (mounted) {
-                        Navigator.of(navigatorContext).popUntil((route) => route.isFirst);
+                        try {
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                        } catch (navError) {
+                          debugPrint('Navigation error going back: $navError');
+                          // Fallback: just pop once
+                          try {
+                            Navigator.of(context).pop();
+                          } catch (fallbackError) {
+                            debugPrint('Fallback navigation error: $fallbackError');
+                          }
+                        }
                       }
                     });
                   } else {
@@ -478,10 +692,18 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
                 }
               } catch (e) {
                 if (mounted) {
-                  // Close loading dialog
-                  Navigator.of(navigatorContext).pop();
+                  // Close loading dialog safely
+                  try {
+                    Navigator.of(navigatorContext).pop();
+                  } catch (navError) {
+                    debugPrint('Navigation error: $navError');
+                  }
+                  
                   scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('Error deleting organization: $e')),
+                    SnackBar(
+                      content: Text('Error deleting organization: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -613,20 +835,36 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
-            if (widget.organization.location != null && widget.organization.location!.isNotEmpty) ...[
+            if (widget.organization.locationString != null) ...[
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.location_on, size: 16),
                   const SizedBox(width: 4),
-                  Text(widget.organization.location!),
+                  Text(widget.organization.locationString!),
                 ],
               ),
             ],
             if (widget.organization.orgType != null) ...[
               const SizedBox(height: 8),
               Text('Organization Type: ${widget.organization.orgType == 'parent' ? 'Parent' : 'Child'}'),
+            ],
+            if (widget.organization.leiCode != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.verified, size: 16, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text('LEI: ${widget.organization.leiCode}'),
+                  if (widget.organization.vleiStatus == 'verified') ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.security, size: 16, color: Colors.blue),
+                    const Text('vLEI', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  ],
+                ],
+              ),
             ],
           ],
         ),
@@ -1318,37 +1556,33 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            if (widget.organization.website != null && widget.organization.website!.isNotEmpty)
-              InkWell(
-                onTap: () async {
-                  final url = Uri.parse(widget.organization.website!.startsWith('http') 
-                      ? widget.organization.website! 
-                      : 'https://${widget.organization.website!}');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url);
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.language),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          widget.organization.website!,
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColor,
-                            decoration: TextDecoration.underline,
+            // Note: Website field is not available in the Organization model
+            // Display contact information from address if available
+            if (widget.organization.address != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            _formatAddress(widget.organization.address!),
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
               )
             else
-              const Text('No website available'),
+              const Text('No contact information available'),
           ],
         ),
       ),
@@ -1368,6 +1602,33 @@ class _OrganizationProfileScreenState extends State<OrganizationProfileScreen> {
     } else {
       return const Icon(Icons.eco, color: Colors.green);
     }
+  }
+
+  // Helper method to format organization address
+  String _formatAddress(OrganizationAddress address) {
+    final parts = <String>[];
+    
+    if (address.streetAddress != null && address.streetAddress!.isNotEmpty) {
+      parts.add(address.streetAddress!);
+    }
+    
+    if (address.city != null && address.city!.isNotEmpty) {
+      parts.add(address.city!);
+    }
+    
+    if (address.stateProvince != null && address.stateProvince!.isNotEmpty) {
+      parts.add(address.stateProvince!);
+    }
+    
+    if (address.postalCode != null && address.postalCode!.isNotEmpty) {
+      parts.add(address.postalCode!);
+    }
+    
+    if (address.country != null && address.country!.isNotEmpty) {
+      parts.add(address.country!);
+    }
+    
+    return parts.isEmpty ? 'No address available' : parts.join(', ');
   }
 
   Icon _getIconForActivityType(String? type) {

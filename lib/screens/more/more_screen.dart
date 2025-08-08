@@ -77,7 +77,7 @@ class _MoreScreenState extends State<MoreScreen> {
           // Only show Organization menu item for paid tiers
           if (serviceLevel != ServiceLevel.free)
             MoreMenuItem(
-              title: 'Organization',
+              title: 'Organization Manager',
               icon: Icons.business,
               onTap: () {
                 // Clear organization notifications when navigating to the Organization screen
@@ -94,7 +94,7 @@ class _MoreScreenState extends State<MoreScreen> {
             )
           else
             MoreMenuItem(
-              title: 'Organization',
+              title: 'Organization Manager',
               icon: Icons.business,
               onTap: () {
                 showDialog(
@@ -145,7 +145,7 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
           
           MoreMenuItem(
-            title: 'Solutions',
+            title: 'Solutions Providers',
             icon: Icons.lightbulb,
             onTap: () => Navigator.push(
               context,
